@@ -136,3 +136,27 @@ def test_replay_entry_is_next_session_open(monkeypatch):
     assert trades
     decision_index = 210
     assert trades[0].entry == frame.iloc[decision_index + 1]["open"]
+
+
+def test_feature_row_preserves_each_agent_for_future_ablation():
+    trade = SimpleNamespace(day="2026-01-01", decision="شراء", exit_window_days=5)
+    tech = SimpleNamespace(key="tech", score=42, confidence=80, flags={})
+    gate = SimpleNamespace(
+        key="systematic_gate", score=0, confidence=75,
+        flags={"systematic_score": 50},
+    )
+    dec = {
+        "final_score": 30, "confidence": 55, "agreement": 75,
+        "vetoed": None, "evidence_coverage": 60, "evidence_quality": 70,
+        "supporting_families": ["price", "macro", "flows"],
+        "risk_multiplier": 0.5,
+    }
+    row = backtester_v5._to_feature_row(
+        trade, dec,
+        {"reports": [tech, gate], "rsi": 50, "atr": 10, "macd_hist": 1},
+        {},
+    )
+    assert row["agent_tech_score"] == 42
+    assert row["agent_systematic_gate_confidence"] == 75
+    assert row["systematic_score"] == 50
+    assert row["supporting_family_count"] == 3

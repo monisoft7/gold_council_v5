@@ -30,7 +30,7 @@ def _kind(row) -> str:
 
 
 def event_calendar_agent(ref: datetime = None, events: pd.DataFrame = None,
-                         events_path: str = "events_3y.csv") -> AgentReport:
+                         events_path: str = "data_cache/events_2008_2026.csv") -> AgentReport:
     ref = pd.Timestamp(ref or datetime.now(timezone.utc))
     ref = ref.tz_localize("UTC") if ref.tzinfo is None else ref.tz_convert("UTC")
     frame = events.copy() if events is not None else _load(str(Path(events_path).resolve()))

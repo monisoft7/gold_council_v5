@@ -42,7 +42,7 @@ def evaluate(df: pd.DataFrame, cost_bps=5.0) -> dict:
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--prices", default="gold_3y_daily.csv")
+    parser.add_argument("--prices", default="data_cache/gold_daily_2008_2026.csv")
     parser.add_argument("--cost-bps", type=float, default=5.0)
     parser.add_argument("--out", default="data_cache/baseline_report.json")
     args = parser.parse_args()

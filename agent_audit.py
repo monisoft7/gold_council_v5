@@ -53,7 +53,7 @@ def run(prices_csv, macro_csv, step=5):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--prices", default="gold_3y_daily.csv")
+    parser.add_argument("--prices", default="data_cache/gold_daily_2008_2026.csv")
     parser.add_argument("--macro", default="data_cache/macro_point_in_time.csv")
     parser.add_argument("--step", type=int, default=5)
     parser.add_argument("--out", default="data_cache/agent_audit.json")

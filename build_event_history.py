@@ -43,7 +43,7 @@ def build(official_dir: str, existing: str | None = None) -> pd.DataFrame:
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--official-dir", default="data_cache/official")
-    parser.add_argument("--existing", default="events_3y.csv")
+    parser.add_argument("--existing", default="data_cache/events_2008_2026.csv")
     parser.add_argument("--out", default="data_cache/events_2008_2026.csv")
     args = parser.parse_args()
     data = build(args.official_dir, args.existing)

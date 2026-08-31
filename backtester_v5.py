@@ -200,7 +200,8 @@ def classify_news_window(news_window: list) -> dict:
 
 def run_replay(days_back=365, step_days=4, windows_days_max=7,
                capital=10000.0, risk_pct=1.0, news_csv=None, prices_csv=None,
-               min_forward_days=5, macro_csv=None, events_csv="events_3y.csv"):
+               min_forward_days=5, macro_csv=None,
+               events_csv=str(decision_pipeline.DEFAULT_EVENTS_PATH)):
     if prices_csv:
         full = load_prices_csv(prices_csv)
     else:
@@ -263,7 +264,7 @@ def run_replay(days_back=365, step_days=4, windows_days_max=7,
 
 
 def _to_feature_row(trade, dec, ctx, news_cats):
-    return {
+    row = {
         "day": str(trade.day), "decision": trade.decision,
         "exit_window_days": int(trade.exit_window_days),
         "score": dec["final_score"], "confidence": dec["confidence"],
@@ -271,8 +272,25 @@ def _to_feature_row(trade, dec, ctx, news_cats):
         "rsi": ctx.get("rsi", 0), "volatility_pct": ctx.get("volatility_pct", 0),
         "macd_hist": ctx.get("macd_hist", 0), "trend_bias": ctx.get("trend_bias", 0),
         "atr": ctx.get("atr", 0), "adx_proxy": abs(ctx.get("macd_hist", 0)) * 10,
+        "evidence_coverage": dec.get("evidence_coverage", 0),
+        "evidence_quality": dec.get("evidence_quality", 0),
+        "supporting_family_count": len(dec.get("supporting_families", [])),
+        "risk_multiplier": dec.get("risk_multiplier", 1.0),
         **news_cats,
     }
+    # حفظ أثر كل وكيل ضروري لاختبار الإزالة وتحسين المجلس دون تخمين.
+    for report in ctx.get("reports", []):
+        key = str(report.key).replace(" ", "_")
+        row[f"agent_{key}_score"] = float(report.score)
+        row[f"agent_{key}_confidence"] = float(report.confidence)
+        flags = getattr(report, "flags", {})
+        if "systematic_score" in flags:
+            row["systematic_score"] = float(flags["systematic_score"])
+        if report.key == "event":
+            row["event_calendar_available"] = int(
+                bool(flags.get("calendar_available", False))
+            )
+    return row
 
 
 def _summarize(trades):

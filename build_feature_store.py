@@ -47,7 +47,7 @@ def build(decisions: pd.DataFrame, official_dir) -> pd.DataFrame:
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--prices", default="gold_3y_daily.csv")
+    parser.add_argument("--prices", default="data_cache/gold_daily_2008_2026.csv")
     parser.add_argument("--official-dir", default="data_cache/official")
     parser.add_argument("--out", default="data_cache/macro_point_in_time.csv")
     args = parser.parse_args()

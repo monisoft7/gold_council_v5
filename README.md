@@ -9,6 +9,8 @@ pip install -r requirements.txt
 # انسخ .env.example إلى .env ثم أدخل مفاتيحك محلياً
 streamlit run app_v2.py            # الواجهة
 python scheduler_service.py        # خدمة 24/7 مع تيليجرام
+python mt5_demo_service.py          # MT5 Demo Dry Run — لا يرسل أمراً
+python mt5_demo_service.py --execute-demo  # إرسال صريح إلى DEMO فقط
 python backtester_v5.py --replay --days 720 --step 2 --prices-csv data_cache/gold_daily_2008_2026.csv --macro-csv data_cache/macro_point_in_time_2008_2026.csv --events-csv data_cache/events_2008_2026.csv --news-csv gold_news_master.csv --out bt.json --features-out features_v5.csv
 python ml_trainer.py --features features_v5.csv --model-out model.pkl --features-out feat_names.json
 python walk_forward.py --features features_v5.csv   # التحقق خارج العينة
@@ -34,7 +36,10 @@ pytest -q tests/                   # الاختبارات (بدون شبكة)
 | `backtester_v5.py` | باك-تست مُصحَّح (SL/TP فعليان، لا تلاعب بالنافذة) |
 | `ml_trainer.py` | تدريب XGBoost (TSS ≥30 صفاً / LOO ≥15) |
 | `news_classifier.py` | تصنيف الأخبار 7 فئات + Groq اختياري |
-| `tests/` | 58 اختبار pytest تعمل بدون إنترنت، بينها اختبار بدء Streamlit |
+| `mt5_demo_bridge.py` | جسر MT5 يرفض الحساب الحقيقي ويفحص الطلب قبل إرساله |
+| `mt5_demo_service.py` | تشغيل المجلس على شموع MT5 المغلقة وتنفيذ Demo اختياري |
+| `mt5_demo_report.py` | تقرير نتائج 14/30 يوماً من سجل صفقات MT5 |
+| `tests/` | 65 اختبار pytest تعمل بدون إنترنت، بينها Streamlit وMT5 |
 | `.github/workflows/ci.yml` | CI عند كل push |
 
 ## المقارنة المعيارية مع أفضل المشاريع المفتوحة
