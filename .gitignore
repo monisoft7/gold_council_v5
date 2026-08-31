@@ -1,0 +1,21 @@
+# أسرار — لن تُرفع أبداً إلى GitHub
+.env
+*.env
+
+# نماذج ومخرجات ثقيلة
+*.pkl
+*.zip
+data_cache/
+__pycache__/
+.pytest_cache/
+.codex_test_tmp*/
+*.pyc
+
+# مخرجات التشغيل (اختياري — احذف السطرين التاليين إذا أردت مشاركة النتائج)
+bt_*.json
+feat_names.json
+feat_names*.json
+walk_forward_report.json
+features_v5.csv
+features_*.csv
+feat_*.csv
