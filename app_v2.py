@@ -6,9 +6,7 @@
 """
 import os
 import streamlit as st
-import pandas as pd
 import plotly.graph_objects as go
-from datetime import datetime, timezone
 
 try:
     import config  # اختياري — يستخدمه env_loader.load_env إن وُجد
@@ -39,6 +37,8 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
+st.session_state.setdefault("last_run", None)
+st.session_state.setdefault("last_dec_text", None)
 
 
 # === الشريط الجانبي ===
@@ -207,7 +207,7 @@ with tab_live:
                         fig.add_hline(y=v, line_dash="dash",
                                       annotation_text=str(label))
                     fig.update_layout(height=400, xaxis_rangeslider_visible=False)
-                    st.plotly_chart(fig, use_container_width=True)
+                    st.plotly_chart(fig, width="stretch")
 
 # --- تبويب 2: مختبر التعلم العميق ---
 with tab_ml:

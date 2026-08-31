@@ -34,7 +34,7 @@ pytest -q tests/                   # الاختبارات (بدون شبكة)
 | `backtester_v5.py` | باك-تست مُصحَّح (SL/TP فعليان، لا تلاعب بالنافذة) |
 | `ml_trainer.py` | تدريب XGBoost (TSS ≥30 صفاً / LOO ≥15) |
 | `news_classifier.py` | تصنيف الأخبار 7 فئات + Groq اختياري |
-| `tests/` | 57 اختبار pytest تعمل بدون إنترنت |
+| `tests/` | 58 اختبار pytest تعمل بدون إنترنت، بينها اختبار بدء Streamlit |
 | `.github/workflows/ci.yml` | CI عند كل push |
 
 ## المقارنة المعيارية مع أفضل المشاريع المفتوحة

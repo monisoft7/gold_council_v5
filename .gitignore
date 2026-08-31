@@ -1,6 +1,7 @@
 # أسرار — لن تُرفع أبداً إلى GitHub
 .env
 *.env
+.streamlit/secrets.toml
 
 # نماذج ومخرجات ثقيلة
 *.pkl
