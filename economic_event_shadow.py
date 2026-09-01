@@ -7,10 +7,12 @@ from datetime import datetime, timezone
 import json
 from pathlib import Path
 from types import SimpleNamespace
+import time
 
 import pandas as pd
 
 from economic_event_strategy import EventStrategyConfig, pre_event_atr, simulate_event
+from build_economic_calendar import update_snapshot
 from mt5_event_history import MT5EventHistoryReader, connection_from_env
 
 
@@ -179,9 +181,28 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--snapshots", default=str(DEFAULT_SNAPSHOTS))
     parser.add_argument("--journal", default=str(DEFAULT_JOURNAL))
+    parser.add_argument("--watch", action="store_true",
+                        help="poll calendar + MT5 without running the council or any LLM")
+    parser.add_argument("--interval-seconds", type=int, default=60)
+    parser.add_argument("--max-cycles", type=int)
     args = parser.parse_args()
-    print(json.dumps(run_shadow_once(snapshots=args.snapshots, journal=args.journal),
-                     ensure_ascii=False, indent=2, default=str))
+    cycles = 0
+    while True:
+        if args.watch:
+            try:
+                update_snapshot(args.snapshots, high_impact_only=True)
+            except Exception as exc:
+                print(json.dumps({"status": "calendar_error", "reason": str(exc)},
+                                 ensure_ascii=False), flush=True)
+        try:
+            result = run_shadow_once(snapshots=args.snapshots, journal=args.journal)
+        except Exception as exc:
+            result = {"status": "error", "reason": str(exc), "actions": []}
+        print(json.dumps(result, ensure_ascii=False, indent=2, default=str), flush=True)
+        cycles += 1
+        if not args.watch or (args.max_cycles is not None and cycles >= args.max_cycles):
+            break
+        time.sleep(max(30, int(args.interval_seconds)))
 
 
 if __name__ == "__main__":
