@@ -10,6 +10,7 @@
      ثم افتح @userinfobot وسيعطيك رقم الـ ID الخاص بك.
 """
 import requests
+import council
 
 
 def send_telegram(token: str, chat_id: str, text: str, timeout=15):
@@ -30,7 +31,8 @@ def send_telegram(token: str, chat_id: str, text: str, timeout=15):
 
 
 def build_signal_message(decision: dict, last_price: float,
-                         reports: list, top_headlines: list) -> str:
+                         reports: list, top_headlines: list,
+                         shadow: dict | None = None) -> str:
     """يبني نص رسالة التوصية بصيغة HTML مرتبة."""
     lv = decision["levels"]
     lines = [
@@ -61,12 +63,35 @@ def build_signal_message(decision: dict, last_price: float,
             f"⚖️ العائد/المخاطرة: {lv['rr']}",
         ]
     else:
-        lines.append("⚪ المجلس منقسم — الانتظار هو القرار.")
+        if decision.get("vetoed"):
+            lines.append(f"⚪ الانتظار بسبب بوابة/فيتو: {decision['vetoed']}")
+        else:
+            lines.append("⚪ الإشارة لم تجتز شروط الجودة والتنفيذ؛ الانتظار هو القرار.")
     lines.append("━━━━━━━━━━━━━━━")
     lines.append("🗳️ <b>تصويت الوكلاء:</b>")
-    for r in reports:
-        if r.weight > 0:
+    voting = [r for r in reports if council.WEIGHTS_V2.get(r.key, 0) > 0]
+    for r in voting:
+        lines.append(f"{r.icon} {r.name}: {r.verdict} ({r.score:+.0f})")
+    gates = [r for r in reports if r.key in {"risk", "event", "systematic_gate"}]
+    if gates:
+        lines.append("🛡️ <b>بوابات الأمان غير المصوّتة:</b>")
+        for r in gates:
+            lines.append(f"{r.icon} {r.name}: {r.verdict} — {r.summary}")
+    experimental = [
+        r for r in reports
+        if r.flags.get("experimental") or r.flags.get("non_voting")
+    ]
+    if experimental:
+        lines.append("🧪 <b>مراقبة تجريبية — لا تدخل الدرجة:</b>")
+        for r in experimental:
             lines.append(f"{r.icon} {r.name}: {r.verdict} ({r.score:+.0f})")
+    if shadow is not None:
+        actions = shadow.get("actions") or []
+        if actions:
+            action_text = "، ".join(str(item.get("status")) for item in actions)
+            lines.append(f"👤 NFP Shadow: {action_text} — بدون تنفيذ")
+        else:
+            lines.append("👤 NFP Shadow: لا توجد إشارة نشطة — بدون تنفيذ")
     if top_headlines:
         lines.append("━━━━━━━━━━━━━━━")
         lines.append("🔥 <b>أهم الأخبار المحركة الآن:</b>")

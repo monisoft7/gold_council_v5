@@ -14,6 +14,8 @@ python mt5_demo_service.py --execute-demo  # إرسال صريح إلى DEMO ف�
 python build_economic_calendar.py --high-impact-only  # لقطة Actual/Forecast زمنية
 python mt5_event_history.py --events data_cache/economic_surprises_2020_2025.csv --start 2020-01-01 --end 2025-10-01 --timeframe M15 --bars-before 16 --bars-after 120 --output data_cache/mt5_event_bars_m15_2020_2025.csv --audit-output data_cache/mt5_event_bars_m15_2020_2025_audit.json
 python numeric_surprise_audit.py --surprises data_cache/economic_surprises_2020_2025.csv --bars data_cache/mt5_event_bars_m15_2020_2025.csv --timeframe-minutes 15 --split-date 2023-01-01
+python economic_event_strategy.py   # باكتيست دخول M15 + وقف ATR + خروج 4h
+python economic_event_shadow.py     # NFP Shadow فقط؛ لا يبني ولا يرسل أمراً
 python backtester_v5.py --replay --days 720 --step 2 --aggregation-mode family --prices-csv data_cache/gold_daily_2008_2026.csv --macro-csv data_cache/macro_point_in_time_2008_2026.csv --events-csv data_cache/events_2008_2026.csv --news-csv gold_news_master.csv --out bt.json --features-out features_v5.csv
 python ml_trainer.py --features features_v5.csv --model-out model.pkl --features-out feat_names.json
 python walk_forward.py --features features_v5.csv   # التحقق خارج العينة
@@ -39,6 +41,8 @@ pytest -q tests/                   # الاختبارات (بدون شبكة)
 | `import_global_economic_calendar.py` | مستورد بحثي لمجموعة CC BY-NC-SA مع وسم افتراض الإتاحة |
 | `mt5_event_history.py` | قارئ شموع MT5 حول الخبر؛ DEMO فقط ولا يحتوي دالة أوامر |
 | `numeric_surprise_audit.py` | تدقيق زمني واتساق سنوي وتحمّل تكلفة للمفاجأة الرقمية |
+| `economic_event_strategy.py` | استراتيجية أحداث كاملة: M15/ATR/4h/تكلفة/حجم 0.25% |
+| `economic_event_shadow.py` | متابعة NFP 2026 بسجل append-only ومن دون تنفيذ MT5 |
 | `news_timing_model.py` | مرشح محلي تجريبي يميز وصف الماضي من المعلومة المستقبلية |
 | `official_event_news_sample.py` | عينة CPI/NFP/FOMC متوازنة مع checkpoint وتحليل مزود ثابت |
 | `chronos_foundation_agent.py` | وكيل Chronos جاهز تجريبي بوزن صفر |

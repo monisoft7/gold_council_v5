@@ -19,6 +19,7 @@ from env_loader import env
 import data_feeds
 import decision_pipeline
 from build_economic_calendar import update_snapshot as update_economic_calendar
+from economic_event_shadow import run_shadow_once
 import paper_journal
 import telegram_notifier as tg
 
@@ -41,6 +42,13 @@ def run_meeting() -> dict:
     )
     result["news"] = news
     result["intraday"] = intra
+    try:
+        result["event_shadow"] = run_shadow_once()
+    except Exception as exc:
+        result["event_shadow"] = {"status": "error", "reason": str(exc)}
+        result["dec"].setdefault("pipeline_warnings", []).append(
+            f"economic event shadow failed: {exc}"
+        )
     if calendar_warning:
         result["dec"].setdefault("pipeline_warnings", []).append(calendar_warning)
     return result
@@ -54,7 +62,8 @@ def notify(result: dict, token: str, chat_id: str, prev_decision: str,
     titles = [n["title"] for n in result["news"][:4]]
     ok, msg = tg.send_telegram(token, chat_id,
                                tg.build_signal_message(dec, result["last_price"],
-                                                       result["reports"], titles))
+                                                       result["reports"], titles,
+                                                       result.get("event_shadow")))
     print(f"[TG] {'✅' if ok else '⚠'} {msg}")
     return dec["decision"], ok
 
