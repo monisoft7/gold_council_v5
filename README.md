@@ -1,6 +1,6 @@
 # 🏆 مجلس الذهب — Gold Council Research
 
-منصة بحث كمي لـXAU/USD: 12 وكيلاً متخصصاً + رئيس مجلس + بوابة اتجاه Long/Flat + بيانات Point-in-Time + سجل تداول ورقي. النظام في وضع `research_only` وغير معتمد للتداول الحقيقي.
+منصة بحث كمي لـXAU/USD: وكلاء متخصصون مستقلون + رئيس مجلس + بوابة اتجاه Long/Flat + بيانات Point-in-Time. النظام في وضع `research_only` وغير معتمد للتداول الحقيقي.
 
 ## التشغيل السريع
 
@@ -26,7 +26,10 @@ pytest -q tests/                   # الاختبارات (بدون شبكة)
 | `agents.py` | 4 وكلاء أساسيون (أخبار/اقتصاد كلي/فني/مخاطر) |
 | `cross_asset_agent.py` `seasonality_agent.py` `event_calendar_agent.py` `pattern_agent.py` | 4 وكلاء إضافيون |
 | `council.py` | رئيس المجلس (تصويت حسب عائلة الدليل + فلتر اتجاه + LLM اختياري) |
-| `llm_gateway.py` | Conduit/OpenAI/Groq مع failover؛ Conduit له الأولوية عند ضبطه |
+| `llm_gateway.py` | B.AI أولاً ثم GoRouter/KKToken/OpenAI/Groq مع failover ومهلة صارمة |
+| `build_news_history.py` | جامع GDELT تاريخي قابل للاستئناف لأخبار الذهب السببية |
+| `build_news_events.py` | يحول الأخبار اليومية إلى أحداث منظمة ويحفظ زمن توفرها |
+| `news_impact_agent.py` | وكيل أثر الأخبار Point-in-Time تجريبي بوزن صفر |
 | `chronos_foundation_agent.py` | وكيل Chronos جاهز تجريبي بوزن صفر |
 | `chronos_model_audit.py` | تدقيق زمني مستقل للنموذج التأسيسي قبل التصويت |
 | `ml_overlay.py` | بوابة تجريبية غير مفعلة؛ لا تُعتمد قبل 100 صف مستقل |
@@ -42,7 +45,7 @@ pytest -q tests/                   # الاختبارات (بدون شبكة)
 | `mt5_demo_bridge.py` | جسر MT5 يرفض الحساب الحقيقي ويفحص الطلب قبل إرساله |
 | `mt5_demo_service.py` | تشغيل المجلس على شموع MT5 المغلقة وتنفيذ Demo اختياري |
 | `mt5_demo_report.py` | تقرير نتائج 14/30 يوماً من سجل صفقات MT5 |
-| `tests/` | 73 اختبار pytest تعمل بدون إنترنت، بينها Streamlit وMT5 وLLM failover |
+| `tests/` | اختبارات تعمل بدون إنترنت، بينها منع تسرب المستقبل وMT5 وLLM failover |
 | `.github/workflows/ci.yml` | CI عند كل push |
 
 ## المقارنة المعيارية مع أفضل المشاريع المفتوحة

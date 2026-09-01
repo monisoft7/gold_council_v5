@@ -8,7 +8,9 @@ import os
 from env_loader import env
 
 
-CONDUIT_DEFAULT_BASE = "https://conduit.ozdoev.net/v1"
+BAI_DEFAULT_BASE = "https://api.b.ai/v1"
+GOROUTER_DEFAULT_BASE = "https://gorouter.app/v1"
+KKTOKEN_DEFAULT_BASE = "https://kktoken.cc/v1"
 
 
 @dataclass(frozen=True)
@@ -25,14 +27,22 @@ def _direct(key):
 
 
 def available_settings() -> list[LLMSettings]:
-    """قائمة failover: Conduit ثم OpenAI-compatible ثم Groq."""
+    """مزودون مستقلون بالترتيب: المجاني الموثق ثم الاحتياطيات."""
     available = []
-    conduit_key = env.get("CONDUIT_API_KEY")
-    if conduit_key:
+    provider_specs = (
+        ("B.AI", "BAI", BAI_DEFAULT_BASE, "qwen3.8-flash"),
+        ("GoRouter", "GOROUTER", GOROUTER_DEFAULT_BASE, "claude-opus-5"),
+        ("KKToken", "KKTOKEN", KKTOKEN_DEFAULT_BASE, "claude-opus-5"),
+    )
+    for provider, prefix, default_base, default_model in provider_specs:
+        api_key = _direct(f"{prefix}_API_KEY")
+        if not api_key:
+            continue
         available.append(LLMSettings(
-            provider="Conduit", api_key=conduit_key,
-            base_url=env.get("CONDUIT_BASE_URL") or CONDUIT_DEFAULT_BASE,
-            model=env.get("CONDUIT_MODEL") or "gpt-5-mini",
+            provider=provider,
+            api_key=api_key,
+            base_url=env.get(f"{prefix}_BASE_URL") or default_base,
+            model=env.get(f"{prefix}_MODEL") or default_model,
         ))
     openai_key = _direct("OPENAI_API_KEY") or _direct("OPENAI_KEY")
     if openai_key:
@@ -61,4 +71,9 @@ def client_and_settings(selected=None):
     if selected is None:
         return None, None
     from openai import OpenAI
-    return OpenAI(api_key=selected.api_key, base_url=selected.base_url), selected
+    return OpenAI(
+        api_key=selected.api_key,
+        base_url=selected.base_url,
+        timeout=45.0,
+        max_retries=1,
+    ), selected

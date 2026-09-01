@@ -22,6 +22,7 @@ import seasonality_agent
 import event_calendar_agent
 import pattern_agent
 import systematic_regime_agent
+import news_impact_agent
 from risk_engine import position_size
 
 
@@ -76,6 +77,7 @@ def run_decision(
     load_cached_macro: bool = False,
     events_path: str | Path = DEFAULT_EVENTS_PATH,
     aggregation_mode: str = "family",
+    news_event_history: pd.DataFrame | None = None,
 ) -> dict:
     """يشغّل المجلس كاملاً من بيانات صريحة ويعيد قراراً وسياقه.
 
@@ -117,6 +119,7 @@ def run_decision(
         pattern_agent.pattern_agent(frame.set_index("time")),
         agents.risk_manager(frame, capital, risk_pct),
         agents.expert_scout(news),
+        news_impact_agent.news_impact_agent(news_event_history, as_of=decision_at),
     ]
 
     if macro_history is None and load_cached_macro:
