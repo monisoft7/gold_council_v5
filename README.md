@@ -30,6 +30,7 @@ pytest -q tests/                   # الاختبارات (بدون شبكة)
 | `build_news_history.py` | جامع GDELT تاريخي قابل للاستئناف لأخبار الذهب السببية |
 | `build_news_events.py` | يحول الأخبار اليومية إلى أحداث منظمة ويحفظ زمن توفرها |
 | `news_impact_agent.py` | وكيل أثر الأخبار Point-in-Time تجريبي بوزن صفر |
+| `news_timing_model.py` | مرشح محلي تجريبي يميز وصف الماضي من المعلومة المستقبلية |
 | `chronos_foundation_agent.py` | وكيل Chronos جاهز تجريبي بوزن صفر |
 | `chronos_model_audit.py` | تدقيق زمني مستقل للنموذج التأسيسي قبل التصويت |
 | `ml_overlay.py` | بوابة تجريبية غير مفعلة؛ لا تُعتمد قبل 100 صف مستقل |
