@@ -24,6 +24,7 @@ import agents
 import council
 import telegram_notifier as tg
 import decision_pipeline
+from build_economic_calendar import update_snapshot as update_economic_calendar
 import paper_journal
 try:
     from news_classifier import CATEGORIES, HIGH_IMPACT
@@ -78,22 +79,31 @@ with st.sidebar:
 
 
 st.title("🏆 مجلس الذهب — Gold Council Research")
-st.caption("12 وكيلاً وبوابة اتجاه ومخاطر | بيانات حية + ماكرو وCOT مؤرخان زمنياً")
+st.caption("وكلاء متخصصون وبوابات اتجاه ومخاطر | بيانات حية + ماكرو وCOT مؤرخان زمنياً")
 
 
 def run_agents(spot, daily, news):
     """تشغيل مسار القرار الموحد وعرض أخطائه بوضوح."""
+    calendar_warning = None
     try:
+        try:
+            update_economic_calendar(high_impact_only=True)
+            decision_pipeline.clear_data_caches()
+        except Exception as exc:
+            calendar_warning = f"تعذر تحديث التقويم الرقمي؛ استُخدمت آخر لقطة محلية: {exc}"
         result = decision_pipeline.run_decision(
             daily, news, spot_price=spot.get("price"),
             capital=capital, risk_pct=risk_pct,
             load_cached_macro=True,
+            load_cached_surprises=True,
         )
     except Exception as exc:
         st.error(f"فشل تجميع الوكلاء: {exc}")
         return None
     for warning in result["dec"].get("pipeline_warnings", []):
         st.warning(warning)
+    if calendar_warning:
+        st.warning(calendar_warning)
     return result["reports"], result["dec"], result["last_price"]
 
 

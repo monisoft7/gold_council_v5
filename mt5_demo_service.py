@@ -53,6 +53,7 @@ def run_once(*, execute_demo: bool = False) -> dict:
             risk_pct=risk_pct,
             as_of=datetime.now(timezone.utc),
             load_cached_macro=True,
+            load_cached_surprises=True,
         )
         result["news"] = news
         record = paper_journal.append_record(result)

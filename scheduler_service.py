@@ -18,6 +18,7 @@ import traceback
 from env_loader import env
 import data_feeds
 import decision_pipeline
+from build_economic_calendar import update_snapshot as update_economic_calendar
 import paper_journal
 import telegram_notifier as tg
 
@@ -25,14 +26,23 @@ import telegram_notifier as tg
 def run_meeting() -> dict:
     """اجتماع واحد كامل — يعيد القرار والسعر."""
     spot, daily, intra, news = data_feeds.collect_all()
+    calendar_warning = None
+    try:
+        update_economic_calendar(high_impact_only=True)
+        decision_pipeline.clear_data_caches()
+    except Exception as exc:
+        calendar_warning = f"economic calendar refresh failed: {exc}"
     result = decision_pipeline.run_decision(
         daily, news, spot_price=spot.get("price"),
         capital=float(os.environ.get("PAPER_CAPITAL", "10000")),
         risk_pct=float(os.environ.get("RISK_PCT", "1.0")),
         load_cached_macro=True,
+        load_cached_surprises=True,
     )
     result["news"] = news
     result["intraday"] = intra
+    if calendar_warning:
+        result["dec"].setdefault("pipeline_warnings", []).append(calendar_warning)
     return result
 
 

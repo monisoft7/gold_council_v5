@@ -23,12 +23,14 @@ import event_calendar_agent
 import pattern_agent
 import systematic_regime_agent
 import news_impact_agent
+import economic_surprise_agent
 from risk_engine import position_size
 
 
 ROOT = Path(__file__).resolve().parent
 DEFAULT_MACRO_PATH = ROOT / "data_cache" / "macro_point_in_time_2008_2026.csv"
 DEFAULT_EVENTS_PATH = ROOT / "data_cache" / "events_2008_2026.csv"
+DEFAULT_SURPRISE_PATH = ROOT / "data_cache" / "economic_calendar_snapshots.csv"
 
 
 @lru_cache(maxsize=4)
@@ -36,7 +38,19 @@ def _read_csv_cached(path: str) -> pd.DataFrame:
     return pd.read_csv(path)
 
 
+def clear_data_caches() -> None:
+    """Invalidate live CSV snapshots after an atomic collector update."""
+    _read_csv_cached.cache_clear()
+
+
 def load_macro_history(path: str | Path = DEFAULT_MACRO_PATH) -> pd.DataFrame | None:
+    file = Path(path)
+    if not file.exists():
+        return None
+    return _read_csv_cached(str(file.resolve())).copy()
+
+
+def load_surprise_history(path: str | Path = DEFAULT_SURPRISE_PATH) -> pd.DataFrame | None:
     file = Path(path)
     if not file.exists():
         return None
@@ -78,6 +92,8 @@ def run_decision(
     events_path: str | Path = DEFAULT_EVENTS_PATH,
     aggregation_mode: str = "family",
     news_event_history: pd.DataFrame | None = None,
+    surprise_history: pd.DataFrame | None = None,
+    load_cached_surprises: bool = False,
 ) -> dict:
     """يشغّل المجلس كاملاً من بيانات صريحة ويعيد قراراً وسياقه.
 
@@ -121,6 +137,12 @@ def run_decision(
         agents.expert_scout(news),
         news_impact_agent.news_impact_agent(news_event_history, as_of=decision_at),
     ]
+
+    if surprise_history is None and load_cached_surprises:
+        surprise_history = load_surprise_history()
+    reports.append(economic_surprise_agent.economic_surprise_agent(
+        surprise_history, as_of=decision_at
+    ))
 
     if macro_history is None and load_cached_macro:
         macro_history = load_macro_history()
