@@ -3,7 +3,7 @@
 يدعم وضعين:
   1) المحرك القاعدي (افتراضي)
   2) وضع LLM: نموذج لغوي يقود الاجتماع (OpenAI/DeepSeek/Kimi/Qwen/Groq)"""
-import config
+import llm_gateway
 
 THRESHOLDS = [
     (35,  "شراء قوي 🟢🟢", "#00c853"),
@@ -35,6 +35,17 @@ EVIDENCE_FAMILY = {
     "cot": "flows", "season": "seasonality",
 }
 
+# وزن العائلة هو أكبر وزن لوكيل مستقل داخلها، لا مجموع أوزان الوكلاء.
+# بذلك لا تحصل عائلة الأخبار أو السعر على نفوذ إضافي لمجرد تكرار الدليل
+# عبر أكثر من اسم وكيل.
+FAMILY_WEIGHTS = {
+    family: max(
+        weight for key, weight in WEIGHTS_V2.items()
+        if EVIDENCE_FAMILY.get(key, key) == family
+    )
+    for family in set(EVIDENCE_FAMILY.values())
+}
+
 # لا ترفع هذه العلامة قبل نجاح اختبار walk-forward مستقل بعينة كافية.
 STRATEGY_VALIDATED = False
 
@@ -44,29 +55,67 @@ def _get_w(key):
 
 
 def chairman_decision(reports, tech_levels, atr_value, last_price,
-                      trend_bias: float = 0.0, ema200: float = 0.0):
+                      trend_bias: float = 0.0, ema200: float = 0.0,
+                      aggregation_mode: str = "family"):
     """trend_bias: +1 = فوق EMA200 صاعد، -1 = تحت EMA200 هابط، 0 = غير معروف.
     فلتر الاتجاه: يُلغي القرارات القوية المعاكسة للاتجاه العام."""
+    if aggregation_mode not in {"family", "agent"}:
+        raise ValueError("aggregation_mode must be 'family' or 'agent'")
+
+    # لا نسمح بتكرار المفتاح نفسه داخل الاجتماع. نحتفظ بالتقرير الأعلى ثقة
+    # حتى لا يستطيع مصدر مكرر تضخيم عائلة الدليل.
+    unique_reports = {}
+    for report in reports:
+        current = unique_reports.get(report.key)
+        if current is None or report.confidence > current.confidence:
+            unique_reports[report.key] = report
+
     voting = []
     # المجلس هو المصدر الوحيد للأوزان. تجاهل الأوزان القديمة المزروعة داخل
     # الوكلاء، واستبعد وكلاء جمع البيانات/المخاطر من التصويت الاتجاهي.
-    for r in reports:
+    for r in unique_reports.values():
         w = _get_w(r.key) if r.key in WEIGHTS_V2 else 0.0
         if w > 0:
             voting.append((r, w))
-    wsum = sum(w for _, w in voting) or 1
-    active = [(r, w) for r, w in voting if abs(r.score) > 10]
-    active_wsum = sum(w for _, w in active)
+    family_scores = {}
+    family_confidences = {}
+    family_members = {}
+    for report, weight in voting:
+        family = EVIDENCE_FAMILY.get(report.key, report.key)
+        family_members.setdefault(family, []).append((report, weight))
+    for family, members in family_members.items():
+        member_wsum = sum(weight for _, weight in members) or 1.0
+        family_scores[family] = sum(
+            report.score * weight for report, weight in members
+        ) / member_wsum
+        family_confidences[family] = sum(
+            report.confidence * weight for report, weight in members
+        ) / member_wsum
+
+    if aggregation_mode == "family":
+        voting_units = [
+            (family, score, family_confidences[family], FAMILY_WEIGHTS[family])
+            for family, score in family_scores.items()
+        ]
+    else:
+        voting_units = [
+            (report.key, report.score, report.confidence, weight)
+            for report, weight in voting
+        ]
+
+    wsum = sum(weight for _, _, _, weight in voting_units) or 1.0
+    active_units = [unit for unit in voting_units if abs(unit[1]) > 10]
+    active_wsum = sum(weight for _, _, _, weight in active_units)
     # المحايد لا يخفف الدليل الموجود. لكن قلة التغطية تخفض الدرجة بمعامل
     # ناعم، بينما شرط العائلات المستقلة أدناه يمنع قرار وكيل واحد.
     if active_wsum:
-        active_score = sum(r.score * w for r, w in active) / active_wsum
+        active_score = sum(score * weight for _, score, _, weight in active_units) / active_wsum
         coverage = active_wsum / wsum
         final = active_score * max(0.65, coverage ** 0.5)
     else:
         final, coverage = 0.0, 0.0
 
-    signs = [1 if r.score > 10 else -1 for r, _ in active]
+    signs = [1 if score > 10 else -1 for _, score, _, _ in active_units]
     dominant = max(signs.count(1), signs.count(-1))
     agreement = dominant / len(signs) if signs else 0
 
@@ -104,8 +153,8 @@ def chairman_decision(reports, tech_levels, atr_value, last_price,
         vetoed = "بوابة أحداث: " + "، ".join(r.name for r in blockers)
 
     # ==== فيتو الانقسام V2 ====
-    bulls = [r for r, _ in voting if r.score > 35]
-    bears = [r for r, _ in voting if r.score < -35]
+    bulls = [unit for unit in voting_units if unit[1] > 35]
+    bears = [unit for unit in voting_units if unit[1] < -35]
     if len(bulls) >= 1 and len(bears) >= 1 and agreement < 0.45 and abs(final) < 35:
         vetoed = (f"انقسام حاد: {len(bulls)} شراء قوي + {len(bears)} بيع قوي "
                   f"— لا يوجد إجماع كافٍ")
@@ -119,7 +168,9 @@ def chairman_decision(reports, tech_levels, atr_value, last_price,
         color = next(c for th, _, c in THRESHOLDS if final >= th)
 
     if active_wsum:
-        evidence_quality = sum(r.confidence * w for r, w in active) / active_wsum / 100
+        evidence_quality = sum(
+            confidence * weight for _, _, confidence, weight in active_units
+        ) / active_wsum / 100
     else:
         evidence_quality = 0.0
     confidence = min(95, (40 + abs(final) * 0.55 + agreement * 15) * evidence_quality)
@@ -129,11 +180,17 @@ def chairman_decision(reports, tech_levels, atr_value, last_price,
 
     # ==== عتبات الجودة V3 ====
     # 1) درجة أدنى 30 (وليس 15) — إشارة ضعيفة = لا صفقة
-    # 2) إجماع حقيقي: 4 وكلاء على الأقل باتجاه واحد (من 8)
-    supporting = [r for r, _ in active
-                  if (r.score > 10 if final > 0 else r.score < -10)]
-    votes_for = len(supporting)
-    supporting_families = sorted({EVIDENCE_FAMILY.get(r.key, r.key) for r in supporting})
+    # 2) إجماع حقيقي: ثلاث عائلات أدلة مستقلة على الأقل باتجاه واحد.
+    supporting_units = [
+        unit for unit in active_units
+        if (unit[1] > 10 if final > 0 else unit[1] < -10)
+    ]
+    if aggregation_mode == "family":
+        supporting_families = sorted(unit[0] for unit in supporting_units)
+    else:
+        supporting_families = sorted({
+            EVIDENCE_FAMILY.get(unit[0], unit[0]) for unit in supporting_units
+        })
     min_families = 3
     if abs(final) < 25 or len(supporting_families) < min_families:
         direction = 0
@@ -197,6 +254,8 @@ def chairman_decision(reports, tech_levels, atr_value, last_price,
         "evidence_coverage": round(coverage * 100, 1),
         "evidence_quality": round(evidence_quality * 100, 1),
         "supporting_families": supporting_families,
+        "family_scores": {k: round(v, 1) for k, v in sorted(family_scores.items())},
+        "aggregation_mode": aggregation_mode,
         "strategy_validated": STRATEGY_VALIDATED,
         "research_only": not STRATEGY_VALIDATED,
         "risk_multiplier": round(max(0.0, min(1.0, risk_multiplier)), 2),
@@ -205,33 +264,27 @@ def chairman_decision(reports, tech_levels, atr_value, last_price,
 
 # ===== LLM (اختياري — يرفع جودة مذكرة القرار بشكل ملحوظ) =====
 def llm_available():
-    return bool(config.get("OPENAI_API_KEY"))
+    return llm_gateway.settings() is not None
 
 
 def llm_chairman(reports, decision, news, last_price):
     if not llm_available():
-        return None, "لا يوجد OPENAI_API_KEY"
-    try:
-        from openai import OpenAI
-        base_url = config.get("OPENAI_BASE_URL") or None
-        model = config.get("OPENAI_MODEL", "gpt-4o-mini") or "gpt-4o-mini"
-        client = OpenAI(api_key=config.get("OPENAI_API_KEY"), base_url=base_url)
-
-        brief = "\n".join(
+        return None, "لا يوجد مزود LLM مضبوط"
+    brief = "\n".join(
             f"- {r.name}: {r.score:+.0f}/100 بثقة {r.confidence:.0f}% — "
             f"{r.summary} | " + " ; ".join(r.bullets[:3])
             for r in reports)
-        headlines = "\n".join(f"• {n['title']} ({n['source']})" for n in news[:15])
-        prompt = f"""أنت رئيس مجلس محللين محترفين لتداول الذهب XAU/USD. السعر الفوري {last_price:,.1f}$.
+    headlines = "\n".join(f"• {n['title']} ({n['source']})" for n in news[:15])
+    prompt = f"""أنت رئيس مجلس محللين محترفين لتداول الذهب XAU/USD. السعر الفوري {last_price:,.1f}$.
 تقارير الوكلاء:
 {brief}
 
 أحدث الأخبار:
 {headlines}
 
-التصويت الموزون: {decision['final_score']:+.0f}/100 (‘{decision['decision']}’) "
-        بثقة {decision['confidence']:.0f}% وفلتر اتجاه: {decision.get('trend_adj',0):+.0f} "
-        "{'⚠️ ' + decision['vetoed'] if decision.get('vetoed') else ''}.
+التصويت الموزون: {decision['final_score']:+.0f}/100 ({decision['decision']})؛
+الثقة {decision['confidence']:.0f}%، وتعديل الاتجاه {decision.get('trend_adj', 0):+.0f}.
+الفيتو: {decision.get('vetoed') or 'لا يوجد'}.
 المستويات: {decision['levels']}.
 
 اكتب مذكرة 8-12 سطراً بالعربية تتضمن:»
@@ -241,11 +294,16 @@ def llm_chairman(reports, decision, news, last_price):
 4) سيناريو الإبطال: ما الذي يلغي التوصية فوراً؟
 
 كن مباشراً كمتداول محترف."""
-
-        resp = client.chat.completions.create(
-            model=model,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.3, max_tokens=900)
-        return resp.choices[0].message.content.strip(), f"✅ {model}"
-    except Exception as e:
-        return None, f"تعذر استدعاء LLM: {e}"
+    errors = []
+    for selected in llm_gateway.available_settings():
+        try:
+            client, selected = llm_gateway.client_and_settings(selected)
+            resp = client.chat.completions.create(
+                model=selected.model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.3, max_tokens=900)
+            return (resp.choices[0].message.content.strip(),
+                    f"✅ {selected.provider} / {selected.model}")
+        except Exception as exc:
+            errors.append(f"{selected.provider}:{type(exc).__name__}")
+    return None, "تعذر استدعاء LLM عبر المزودين: " + ", ".join(errors)

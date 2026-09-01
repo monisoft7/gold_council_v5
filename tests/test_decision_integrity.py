@@ -50,6 +50,36 @@ def test_collection_and_risk_agents_do_not_change_direction_score():
     assert a["raw_score"] == b["raw_score"]
 
 
+def test_family_aggregation_caps_correlated_evidence():
+    base = [
+        _report("macro", 80), _report("tech", -20),
+        _report("macro_data", -20), _report("cot", -20),
+    ]
+    duplicated_news = base + [_report("expert", 80)]
+    family_base = council.chairman_decision(base, {}, 10, 2700,
+                                             aggregation_mode="family")
+    family_duplicate = council.chairman_decision(
+        duplicated_news, {}, 10, 2700, aggregation_mode="family"
+    )
+    legacy_base = council.chairman_decision(base, {}, 10, 2700,
+                                             aggregation_mode="agent")
+    legacy_duplicate = council.chairman_decision(
+        duplicated_news, {}, 10, 2700, aggregation_mode="agent"
+    )
+    assert family_base["raw_score"] == family_duplicate["raw_score"]
+    assert legacy_base["raw_score"] != legacy_duplicate["raw_score"]
+    assert family_duplicate["family_scores"]["news"] == 80.0
+
+
+def test_duplicate_agent_key_cannot_change_family_vote():
+    reports = [
+        _report("macro", 70, 60), _report("macro", -100, 50),
+        _report("tech", 50), _report("macro_data", 50), _report("cot", 50),
+    ]
+    dec = council.chairman_decision(reports, {}, 10, 2700)
+    assert dec["family_scores"]["news"] == 70.0
+
+
 def test_high_impact_event_blocks_trade_without_voting_sell():
     reports = [
         _report("macro", 90), _report("macro_data", 90),
@@ -92,6 +122,13 @@ def test_historical_news_age_uses_decision_time_not_wall_clock():
     assert agents._age_hours(published, as_of=as_of) == 3.0
 
 
+def test_expert_agent_ignores_generic_news_forecasts():
+    generic = {"title": "Gold forecast: rally", "source": "Generic Wire"}
+    expert = {"title": "Gold forecast: rally", "source": "Kitco News"}
+    assert agents.expert_scout([generic]).score == 0
+    assert agents.expert_scout([expert]).score > 0
+
+
 def test_short_cost_is_deducted_for_window_exit():
     full = pd.DataFrame([
         {"time": "2026-01-01", "open": 100, "high": 101, "low": 99, "close": 100},
@@ -120,7 +157,8 @@ def test_replay_entry_is_next_session_open(monkeypatch):
 
     fake_report = SimpleNamespace(key="tech", score=80, confidence=80)
     def fake_decision(window, news, capital, risk_pct, as_of=None,
-                      macro_history=None, events_path="events_3y.csv"):
+                      macro_history=None, events_path="events_3y.csv",
+                      aggregation_mode="family"):
         idx = len(window) - 1
         return ({
             "decision": "شراء", "signal": 1, "final_score": 80,
@@ -149,6 +187,7 @@ def test_feature_row_preserves_each_agent_for_future_ablation():
         "final_score": 30, "confidence": 55, "agreement": 75,
         "vetoed": None, "evidence_coverage": 60, "evidence_quality": 70,
         "supporting_families": ["price", "macro", "flows"],
+        "family_scores": {"price": 33.5, "macro": 21.0},
         "risk_multiplier": 0.5,
     }
     row = backtester_v5._to_feature_row(
@@ -160,3 +199,4 @@ def test_feature_row_preserves_each_agent_for_future_ablation():
     assert row["agent_systematic_gate_confidence"] == 75
     assert row["systematic_score"] == 50
     assert row["supporting_family_count"] == 3
+    assert row["family_price_score"] == 33.5

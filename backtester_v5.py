@@ -78,7 +78,8 @@ def load_news_csv(path: str) -> list:
 def simulate_decision(history_window: pd.DataFrame, news_before: list,
                        capital=10000, risk_pct=1.0, as_of=None,
                        macro_history=None,
-                       events_path=str(decision_pipeline.DEFAULT_EVENTS_PATH)):
+                       events_path=str(decision_pipeline.DEFAULT_EVENTS_PATH),
+                       aggregation_mode="family"):
     if len(history_window) < 210:
         return None, None
     result = decision_pipeline.run_decision(
@@ -86,6 +87,7 @@ def simulate_decision(history_window: pd.DataFrame, news_before: list,
         capital=capital, risk_pct=risk_pct, as_of=as_of,
         macro_history=macro_history, load_cached_macro=False,
         events_path=events_path,
+        aggregation_mode=aggregation_mode,
     )
     context = {"reports": result["reports"], "last_price": result["last_price"]}
     context.update(result["context"])
@@ -201,7 +203,8 @@ def classify_news_window(news_window: list) -> dict:
 def run_replay(days_back=365, step_days=4, windows_days_max=7,
                capital=10000.0, risk_pct=1.0, news_csv=None, prices_csv=None,
                min_forward_days=5, macro_csv=None,
-               events_csv=str(decision_pipeline.DEFAULT_EVENTS_PATH)):
+               events_csv=str(decision_pipeline.DEFAULT_EVENTS_PATH),
+               aggregation_mode="family"):
     if prices_csv:
         full = load_prices_csv(prices_csv)
     else:
@@ -228,7 +231,8 @@ def run_replay(days_back=365, step_days=4, windows_days_max=7,
                    "n": None}]
         dec, ctx = simulate_decision(
             window, nw, capital, risk_pct, as_of=cutoff,
-            macro_history=macro_history, events_path=events_csv)
+            macro_history=macro_history, events_path=events_csv,
+            aggregation_mode=aggregation_mode)
         if dec is None:
             i += step_days; continue
         direction = int(dec.get("signal", 0))
@@ -276,6 +280,7 @@ def _to_feature_row(trade, dec, ctx, news_cats):
         "evidence_quality": dec.get("evidence_quality", 0),
         "supporting_family_count": len(dec.get("supporting_families", [])),
         "risk_multiplier": dec.get("risk_multiplier", 1.0),
+        "aggregation_mode": dec.get("aggregation_mode", "unknown"),
         **news_cats,
     }
     # حفظ أثر كل وكيل ضروري لاختبار الإزالة وتحسين المجلس دون تخمين.
@@ -290,6 +295,8 @@ def _to_feature_row(trade, dec, ctx, news_cats):
             row["event_calendar_available"] = int(
                 bool(flags.get("calendar_available", False))
             )
+    for family, score in dec.get("family_scores", {}).items():
+        row[f"family_{family}_score"] = float(score)
     return row
 
 
@@ -330,6 +337,8 @@ def main():
                     default=str(decision_pipeline.DEFAULT_EVENTS_PATH))
     ap.add_argument("--out", type=str, default="backtest_report_v5.json")
     ap.add_argument("--features-out", type=str, default="features_v5.csv")
+    ap.add_argument("--aggregation-mode", choices=("family", "agent"),
+                    default="family")
     args = ap.parse_args()
     if not args.replay: ap.print_help(); return
     print(f"⏳ BACKTESTER V5 المُصحَّح: {args.days}d, step={args.step}")
@@ -338,7 +347,8 @@ def main():
                                            risk_pct=args.risk,
                                            news_csv=args.news_csv, prices_csv=args.prices_csv,
                                            macro_csv=args.macro_csv,
-                                           events_csv=args.events_csv)
+                                           events_csv=args.events_csv,
+                                           aggregation_mode=args.aggregation_mode)
     with open(args.out, "w", encoding="utf-8") as f:
         json.dump(summary, f, ensure_ascii=False, indent=2)
     if features:

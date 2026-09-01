@@ -245,12 +245,27 @@ EXPERT_SOURCES = [
     ("أرقام Argaam", "https://www.argaam.com", "عربي 🇸🇦", "تغطية خليجية للمعادن والأسواق"),
 ]
 
+EXPERT_SOURCE_MARKERS = (
+    "kitco", "fxstreet", "dailyfx", "tradingview", "investing.com",
+    "world gold council", "bullionvault", "goldseek", "jin10", "fx168",
+    "profinance", "moneycontrol", "economic times", "mubasher", "argaam",
+)
+
+
+def _is_expert_source(news_item):
+    source = str(news_item.get("source") or "").lower()
+    return any(marker in source for marker in EXPERT_SOURCE_MARKERS)
+
 
 def expert_scout(news):
     forecast_words = ["forecast", "prediction", "outlook", "price target", "analysis",
                       "expects", "توقعات", "تحليل", "مستهدف"]
     hits, bull, bear = [], 0.0, 0.0
     for n in news:
+        # لا نعيد تسمية أي عنوان عام على أنه "رأي خبير". هذا الوكيل يصوت
+        # فقط عندما يكون المصدر من قائمة التحليل المتخصصة أعلاه.
+        if not _is_expert_source(n):
+            continue
         t = n["title"].lower()
         if any(w in t for w in forecast_words):
             b = sum(w_ for k, w_ in BULLISH.items() if k in t)

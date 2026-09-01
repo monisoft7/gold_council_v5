@@ -35,6 +35,7 @@ ALIASES: Dict[str, Tuple[str, ...]] = {
     "CONDUIT_API_KEY":    ("CONDUIT_API_KEY",),
     "CONDUIT_BASE_URL":   ("CONDUIT_BASE_URL",),
     "CONDUIT_MODEL":      ("CONDUIT_MODEL",),
+    "LLM_PROVIDER":       ("LLM_PROVIDER",),
     "MT5_LOGIN":          ("MT5_LOGIN",),
     "MT5_PASSWORD":       ("MT5_PASSWORD",),
     "MT5_SERVER":         ("MT5_SERVER",),
