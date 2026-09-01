@@ -26,11 +26,13 @@ pytest -q tests/                   # الاختبارات (بدون شبكة)
 | `agents.py` | 4 وكلاء أساسيون (أخبار/اقتصاد كلي/فني/مخاطر) |
 | `cross_asset_agent.py` `seasonality_agent.py` `event_calendar_agent.py` `pattern_agent.py` | 4 وكلاء إضافيون |
 | `council.py` | رئيس المجلس (تصويت حسب عائلة الدليل + فلتر اتجاه + LLM اختياري) |
-| `llm_gateway.py` | B.AI أولاً ثم GoRouter/KKToken/OpenAI/Groq مع failover ومهلة صارمة |
+| `llm_gateway.py` | Gemini/Groq/B.AI/OpenRouter ثم الاحتياطيات مع failover ومهلة صارمة |
+| `alpha_vantage_news.py` | جامع NEWS_SENTIMENT تاريخي آمن كمصدر ماكرو مساعد |
 | `build_news_history.py` | جامع GDELT تاريخي قابل للاستئناف لأخبار الذهب السببية |
 | `build_news_events.py` | يحول الأخبار اليومية إلى أحداث منظمة ويحفظ زمن توفرها |
 | `news_impact_agent.py` | وكيل أثر الأخبار Point-in-Time تجريبي بوزن صفر |
 | `news_timing_model.py` | مرشح محلي تجريبي يميز وصف الماضي من المعلومة المستقبلية |
+| `official_event_news_sample.py` | عينة CPI/NFP/FOMC متوازنة مع checkpoint وتحليل مزود ثابت |
 | `chronos_foundation_agent.py` | وكيل Chronos جاهز تجريبي بوزن صفر |
 | `chronos_model_audit.py` | تدقيق زمني مستقل للنموذج التأسيسي قبل التصويت |
 | `ml_overlay.py` | بوابة تجريبية غير مفعلة؛ لا تُعتمد قبل 100 صف مستقل |

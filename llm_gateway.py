@@ -9,6 +9,9 @@ from env_loader import env
 
 
 BAI_DEFAULT_BASE = "https://api.b.ai/v1"
+GEMINI_DEFAULT_BASE = "https://generativelanguage.googleapis.com/v1beta/openai"
+GROQ_DEFAULT_BASE = "https://api.groq.com/openai/v1"
+OPENROUTER_DEFAULT_BASE = "https://openrouter.ai/api/v1"
 GOROUTER_DEFAULT_BASE = "https://gorouter.app/v1"
 KKTOKEN_DEFAULT_BASE = "https://kktoken.cc/v1"
 
@@ -30,7 +33,11 @@ def available_settings() -> list[LLMSettings]:
     """مزودون مستقلون بالترتيب: المجاني الموثق ثم الاحتياطيات."""
     available = []
     provider_specs = (
+        ("Gemini", "GEMINI", GEMINI_DEFAULT_BASE, "gemini-2.5-flash"),
+        ("Groq", "GROQ", GROQ_DEFAULT_BASE, "openai/gpt-oss-120b"),
         ("B.AI", "BAI", BAI_DEFAULT_BASE, "qwen3.8-flash"),
+        ("OpenRouter", "OPENROUTER", OPENROUTER_DEFAULT_BASE,
+         "openrouter/free"),
         ("GoRouter", "GOROUTER", GOROUTER_DEFAULT_BASE, "claude-opus-5"),
         ("KKToken", "KKTOKEN", KKTOKEN_DEFAULT_BASE, "claude-opus-5"),
     )
@@ -51,19 +58,19 @@ def available_settings() -> list[LLMSettings]:
             base_url=env.get("OPENAI_BASE_URL") or None,
             model=env.get("OPENAI_MODEL") or "gpt-4o-mini",
         ))
-    groq_key = _direct("GROQ_API_KEY")
-    if groq_key:
-        available.append(LLMSettings(
-            provider="Groq", api_key=groq_key,
-            base_url="https://api.groq.com/openai/v1",
-            model=env.get("GROQ_MODEL") or "llama-3.3-70b-versatile",
-        ))
     return available
 
 
 def settings() -> LLMSettings | None:
     available = available_settings()
     return available[0] if available else None
+
+
+def settings_for(provider: str) -> LLMSettings | None:
+    """Select a configured provider by stable display name."""
+    wanted = provider.casefold()
+    return next((item for item in available_settings()
+                 if item.provider.casefold() == wanted), None)
 
 
 def client_and_settings(selected=None):

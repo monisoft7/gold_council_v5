@@ -20,6 +20,8 @@ def test_entry_is_strictly_after_event_and_horizons_are_forward():
     assert detail.iloc[0]["correct_1s"] == 1
     assert detail.iloc[0]["correct_3s"] == 1
     assert summary["signals"] == 1
+    assert summary["horizons"]["1"]["median_directed_return_pct"] > 0
+    assert len(summary["horizons"]["1"]["accuracy_wilson_95_pct"]) == 2
 
 
 def test_all_neutral_events_produce_zero_signal_report():
@@ -34,3 +36,15 @@ def test_all_neutral_events_produce_zero_signal_report():
     assert detail.empty
     assert summary["signals"] == 0
     assert summary["horizons"]["1"]["directional_accuracy_pct"] is None
+
+
+def test_report_is_split_by_official_event_type():
+    events = pd.DataFrame([{
+        "available_at": "2024-01-01T20:00:00Z", "gold_impact": "bullish",
+        "confidence": 80, "official_event_type": "CPI",
+    }])
+    prices = pd.DataFrame([{
+        "time": "2024-01-02T05:00:00Z", "open": 100, "close": 101,
+    }])
+    _, summary = nea.audit(events, prices)
+    assert summary["by_event_type"]["CPI"]["signals"] == 1

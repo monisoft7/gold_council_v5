@@ -91,18 +91,39 @@ def analyze(headlines, *, selected=None, allow_network=False,
         "\n".join(items)
     )
     analysis = None
+    use_json_mode = True
     for _attempt in range(2):
+        request_payload = {
+            "model": selected.model,
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": 0, "max_tokens": 700,
+        }
+        if use_json_mode:
+            request_payload["response_format"] = {"type": "json_object"}
         response = requests.post(
             f"{selected.base_url.rstrip('/')}/chat/completions",
             headers={"Authorization": f"Bearer {selected.api_key}",
                      "Content-Type": "application/json"},
-            json={"model": selected.model,
-                  "messages": [{"role": "user", "content": prompt}],
-                  "temperature": 0, "max_tokens": 700,
-                  "response_format": {"type": "json_object"}},
+            json=request_payload,
             timeout=timeout,
         )
-        response.raise_for_status()
+        status_code = getattr(response, "status_code", 200)
+        if status_code == 429:
+            return {"status": "rate_limited", "analysis": None, "cached": False,
+                    "provider": selected.provider, "model": selected.model}
+        if status_code >= 400:
+            try:
+                error_message = str(response.json().get("error", {}).get(
+                    "message", "request rejected"))[:240]
+            except (ValueError, AttributeError, TypeError):
+                error_message = "request rejected"
+            if (status_code == 400 and use_json_mode and
+                    "json" in error_message.casefold()):
+                use_json_mode = False
+                continue
+            return {"status": "http_error", "analysis": None, "cached": False,
+                    "provider": selected.provider, "model": selected.model,
+                    "http_status": status_code, "error_message": error_message}
         try:
             content = response.json()["choices"][0]["message"].get("content", "")
             analysis = _validate(_json_content(content))

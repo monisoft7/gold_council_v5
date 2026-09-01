@@ -10,6 +10,11 @@ from env_loader import env
 
 
 PROVIDERS = {
+    "gemini": ("GEMINI_API_KEY", "GEMINI_BASE_URL",
+               "https://generativelanguage.googleapis.com/v1beta/openai"),
+    "groq": ("GROQ_API_KEY", "GROQ_BASE_URL", "https://api.groq.com/openai/v1"),
+    "openrouter": ("OPENROUTER_API_KEY", "OPENROUTER_BASE_URL",
+                   "https://openrouter.ai/api/v1"),
     "bai": ("BAI_API_KEY", "BAI_BASE_URL", "https://api.b.ai/v1"),
     "gorouter": ("GOROUTER_API_KEY", "GOROUTER_BASE_URL", "https://gorouter.app/v1"),
     "kktoken": ("KKTOKEN_API_KEY", "KKTOKEN_BASE_URL", "https://kktoken.cc/v1"),

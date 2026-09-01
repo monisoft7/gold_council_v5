@@ -25,6 +25,16 @@ def test_gateway_returns_none_without_keys(monkeypatch):
     assert llm_gateway.settings() is None
 
 
+def test_settings_for_selects_requested_provider(monkeypatch):
+    choices = [
+        llm_gateway.LLMSettings("Gemini", "g", "https://g", "gm"),
+        llm_gateway.LLMSettings("Groq", "q", "https://q", "qm"),
+    ]
+    monkeypatch.setattr(llm_gateway, "available_settings", lambda: choices)
+    assert llm_gateway.settings_for("groq") == choices[1]
+    assert llm_gateway.settings_for("missing") is None
+
+
 def test_chairman_fails_over_to_next_provider(monkeypatch):
     first = llm_gateway.LLMSettings("B.AI", "x", "https://one", "m1")
     second = llm_gateway.LLMSettings("Groq", "y", "https://two", "m2")

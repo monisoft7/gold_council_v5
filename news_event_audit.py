@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 from pathlib import Path
 
 import pandas as pd
@@ -33,6 +34,8 @@ def audit(events: pd.DataFrame, prices: pd.DataFrame,
                "entry_time": price_times[entry_index].isoformat(),
                "impact": event["gold_impact"], "direction": direction,
                "entry": entry, "confidence": float(event.get("confidence", 0))}
+        if "official_event_type" in event.index:
+            row["official_event_type"] = event.get("official_event_type")
         for horizon in horizons:
             exit_index = entry_index + horizon - 1
             if exit_index >= len(prices):
@@ -44,24 +47,56 @@ def audit(events: pd.DataFrame, prices: pd.DataFrame,
             row[f"correct_{horizon}s"] = int(direction * market_return > 0)
         records.append(row)
     detail = pd.DataFrame(records)
-    summary = {"signals": len(detail), "horizons": {}}
+    _, summary = audit_summary(detail, horizons)
+    if not detail.empty and "official_event_type" in detail.columns:
+        summary["by_event_type"] = {}
+        for event_type, group in detail.groupby("official_event_type"):
+            _, group_summary = audit_summary(group, horizons)
+            summary["by_event_type"][str(event_type)] = group_summary
+    return detail, summary
+
+
+def audit_summary(detail: pd.DataFrame, horizons=(1, 3, 7)) -> tuple[pd.DataFrame, dict]:
+    """Summarize already-computed detail without recursively grouping it."""
+    clean = detail.drop(columns=["official_event_type"], errors="ignore")
+    summary = {"signals": len(clean), "horizons": {}}
     for horizon in horizons:
         correct = pd.to_numeric(
-            detail.get(f"correct_{horizon}s", pd.Series(dtype=float)),
-            errors="coerce",
+            clean.get(f"correct_{horizon}s", pd.Series(dtype=float)), errors="coerce"
         )
         returns = pd.to_numeric(
-            detail.get(f"return_{horizon}s", pd.Series(dtype=float)),
-            errors="coerce",
+            clean.get(f"return_{horizon}s", pd.Series(dtype=float)), errors="coerce"
         )
-        directed = returns * detail.get("direction", pd.Series(dtype=float))
+        directed = returns * clean.get("direction", pd.Series(dtype=float))
         valid = correct.notna()
+        directed_valid = directed[valid].dropna()
+        wins = float((correct[valid] == 1).sum())
+        observations = int(valid.sum())
+        if observations:
+            z = 1.96
+            rate = wins / observations
+            denominator = 1 + z * z / observations
+            center = (rate + z * z / (2 * observations)) / denominator
+            margin = (z * math.sqrt(rate * (1 - rate) / observations +
+                                    z * z / (4 * observations ** 2)) /
+                      denominator)
+            interval = [round((center - margin) * 100, 2),
+                        round((center + margin) * 100, 2)]
+        else:
+            interval = [None, None]
+        gross_profit = directed_valid[directed_valid > 0].sum()
+        gross_loss = -directed_valid[directed_valid < 0].sum()
         summary["horizons"][str(horizon)] = {
-            "observations": int(valid.sum()),
+            "observations": observations,
             "directional_accuracy_pct": round(float(correct[valid].mean() * 100), 2)
             if valid.any() else None,
+            "accuracy_wilson_95_pct": interval,
             "mean_directed_return_pct": round(float(directed[valid].mean()), 4)
             if valid.any() else None,
+            "median_directed_return_pct": round(float(directed_valid.median()), 4)
+            if not directed_valid.empty else None,
+            "profit_factor": round(float(gross_profit / gross_loss), 4)
+            if gross_loss > 0 else None,
         }
     return detail, summary
 

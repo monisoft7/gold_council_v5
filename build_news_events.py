@@ -17,7 +17,7 @@ FIELDS = ("available_at", "event_date", "event_type", "gold_impact", "magnitude"
           "model", "headline_count")
 
 
-def build(source: Path, output: Path, *, max_days=None) -> list[dict]:
+def build(source: Path, output: Path, *, max_days=None, provider=None) -> list[dict]:
     news = pd.read_csv(source)
     news["time"] = pd.to_datetime(news["time"], utc=True, errors="coerce")
     news = news.dropna(subset=["time", "title"]).sort_values("time")
@@ -26,7 +26,8 @@ def build(source: Path, output: Path, *, max_days=None) -> list[dict]:
         with output.open(encoding="utf-8-sig", newline="") as handle:
             existing = list(csv.DictReader(handle))
     completed = {row["event_date"] for row in existing}
-    selected = llm_gateway.settings()
+    selected = (llm_gateway.settings_for(provider) if provider
+                else llm_gateway.settings())
     if selected is None:
         raise RuntimeError("No configured LLM provider")
     added = 0
@@ -69,8 +70,10 @@ def main() -> None:
     parser.add_argument("--source", default="data_cache/gold_news_history.csv")
     parser.add_argument("--output", default="data_cache/gold_news_events.csv")
     parser.add_argument("--max-days", type=int)
+    parser.add_argument("--provider", choices=("Gemini", "Groq", "B.AI", "OpenRouter"))
     args = parser.parse_args()
-    rows = build(Path(args.source), Path(args.output), max_days=args.max_days)
+    rows = build(Path(args.source), Path(args.output), max_days=args.max_days,
+                 provider=args.provider)
     print(f"DONE rows={len(rows)} output={args.output}")
 
 
