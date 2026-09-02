@@ -59,9 +59,10 @@ def real_account_gate(report: dict, *, days: int, starting_equity: float) -> dic
     """سياسة موضوعية؛ مرور الوقت وحده لا يكفي للانتقال إلى حساب حقيقي."""
     checks = {
         "minimum_30_closed_positions": int(report.get("closed_positions", 0)) >= 30,
-        "minimum_14_calendar_days": int(days) >= 14,
-        "win_rate_at_least_55pct": float(report.get("win_rate_pct") or 0) >= 55,
-        "profit_factor_at_least_1_20": float(report.get("profit_factor") or 0) >= 1.20,
+        "minimum_30_calendar_days": int(days) >= 30,
+        # Win rate alone is not a quality gate when wins and losses have
+        # different sizes. Profit factor measures frequency and payoff.
+        "profit_factor_at_least_1_25": float(report.get("profit_factor") or 0) >= 1.25,
         "drawdown_below_5pct": float(report.get("max_drawdown_money") or 0)
         <= float(starting_equity) * 0.05,
     }

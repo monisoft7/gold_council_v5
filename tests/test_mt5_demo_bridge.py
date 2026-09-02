@@ -143,8 +143,14 @@ def test_real_account_gate_requires_sample_quality_not_time_only():
         "profit_factor": 5, "max_drawdown_money": 0,
     }
     assert real_account_gate(weak, days=30, starting_equity=10_000)["eligible_for_real"] is False
+    assert real_account_gate({
+        "closed_positions": 30, "profit_factor": 1.5, "max_drawdown_money": 300,
+    }, days=20, starting_equity=10_000)["eligible_for_real"] is False
+    assert real_account_gate({
+        "closed_positions": 30, "profit_factor": 1.24, "max_drawdown_money": 300,
+    }, days=30, starting_equity=10_000)["eligible_for_real"] is False
     strong = {
-        "closed_positions": 30, "win_rate_pct": 60,
+        "closed_positions": 30, "win_rate_pct": 45,
         "profit_factor": 1.5, "max_drawdown_money": 300,
     }
     assert real_account_gate(strong, days=30, starting_equity=10_000)["eligible_for_real"] is True

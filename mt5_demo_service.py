@@ -14,12 +14,34 @@ import decision_pipeline
 from env_loader import env
 from mt5_demo_bridge import MT5ConnectionConfig, MT5DemoBridge
 import paper_journal
+from strategy_promotion import DEFAULT_OUTPUT as DEFAULT_PROMOTION_REPORT
 
 
 EXECUTION_JOURNAL = Path(__file__).resolve().parent / "data_cache" / "mt5_demo_execution.jsonl"
 EXECUTION_HOUR_UTC = 18
 EXECUTION_WINDOW_MINUTES = 30
 LOOP_ERROR_RETRY_SECONDS = 300
+
+
+def load_promotion_gate(path: str | Path = DEFAULT_PROMOTION_REPORT) -> dict:
+    """Fail closed when the forward-validation artifact is absent or invalid."""
+    report_path = Path(path)
+    try:
+        payload = json.loads(report_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError) as exc:
+        return {
+            "promotion_allowed": False,
+            "status": "missing_or_invalid",
+            "reason": f"{type(exc).__name__}: {exc}",
+            "path": str(report_path),
+        }
+    return {
+        "promotion_allowed": payload.get("promotion_allowed") is True,
+        "status": "passed" if payload.get("promotion_allowed") is True else "failed",
+        "failed_checks": payload.get("failed_checks", []),
+        "generated_at": payload.get("generated_at"),
+        "path": str(report_path),
+    }
 
 
 def _config() -> MT5ConnectionConfig:
@@ -72,12 +94,15 @@ def seconds_until_execution_window(now=None, *, hour_utc=EXECUTION_HOUR_UTC,
     return max(0, int((target - current).total_seconds()))
 
 
-def run_once(*, execute_demo: bool = False, now=None) -> dict:
+def run_once(*, execute_demo: bool = False, now=None,
+             promotion_report_path: str | Path = DEFAULT_PROMOTION_REPORT) -> dict:
     decision_time = now or datetime.now(timezone.utc)
     if decision_time.tzinfo is None:
         decision_time = decision_time.replace(tzinfo=timezone.utc)
     else:
         decision_time = decision_time.astimezone(timezone.utc)
+    promotion = load_promotion_gate(promotion_report_path)
+    execution_authorized = bool(execute_demo and promotion["promotion_allowed"])
     bridge = MT5DemoBridge(_config())
     try:
         account = bridge.connect()
@@ -88,7 +113,9 @@ def run_once(*, execute_demo: bool = False, now=None) -> dict:
         if execute_demo and not in_window:
             payload = {
                 "recorded_at": decision_time.isoformat(), "paper_run_id": None,
-                "account": account, "execute_demo": True, "risk_pct": 0.25,
+                "account": account, "execute_demo_requested": True,
+                "execute_demo": execution_authorized, "promotion_gate": promotion,
+                "risk_pct": 0.25,
                 "strategy_profile": "intraday_4h",
                 "execution_window": {
                     "hour_utc": EXECUTION_HOUR_UTC,
@@ -119,7 +146,13 @@ def run_once(*, execute_demo: bool = False, now=None) -> dict:
         )
         result["news"] = news
         record = paper_journal.append_record(result)
-        if execute_demo and not in_window:
+        if execute_demo and not execution_authorized:
+            execution = {
+                "status": "blocked",
+                "reason": "فشل بوابة الترقية؛ يستمر التسجيل في وضع Shadow فقط",
+                "failed_checks": promotion.get("failed_checks", []),
+            }
+        elif execute_demo and not in_window:
             execution = {
                 "status": "skipped",
                 "reason": "خارج نافذة التنفيذ المختبرة 18:00 UTC ±30 دقيقة",
@@ -130,7 +163,9 @@ def run_once(*, execute_demo: bool = False, now=None) -> dict:
             "recorded_at": decision_time.isoformat(),
             "paper_run_id": record["run_id"],
             "account": account,
-            "execute_demo": execute_demo,
+            "execute_demo_requested": execute_demo,
+            "execute_demo": execution_authorized,
+            "promotion_gate": promotion,
             "risk_pct": risk_pct,
             "strategy_profile": "intraday_4h",
             "execution_window": {
@@ -162,10 +197,14 @@ def main() -> None:
     parser.add_argument("--loop", action="store_true",
                         help="تشغيل مستمر؛ يفضل مرة يومياً بعد إغلاق شمعة الذهب")
     parser.add_argument("--interval-min", type=int, default=1440)
+    parser.add_argument("--promotion-report", default=str(DEFAULT_PROMOTION_REPORT))
     args = parser.parse_args()
     while True:
         try:
-            payload = run_once(execute_demo=args.execute_demo)
+            payload = run_once(
+                execute_demo=args.execute_demo,
+                promotion_report_path=args.promotion_report,
+            )
         except Exception as exc:
             # تشغيل الحلقة يجب أن يتعافى من انقطاع MT5 أو الشبكة بدلاً من
             # سقوط الحارس بالكامل. التشغيل لمرة واحدة يبقى صارماً للتشخيص.
@@ -186,8 +225,7 @@ def main() -> None:
             break
         wait_seconds = max(300, args.interval_min * 60)
         maintenance = payload.get("position_maintenance") or {}
-        if args.execute_demo \
-                and not payload.get("execution_window", {}).get("inside_now", False) \
+        if not payload.get("execution_window", {}).get("inside_now", False) \
                 and int(maintenance.get("managed_position_count", 0)) == 0:
             wait_seconds = max(
                 wait_seconds,

@@ -1,7 +1,8 @@
 # تشغيل تجربة MT5 Demo
 
 الجسر مصمم لحساب تجريبي فقط. يرفض `ACCOUNT_TRADE_MODE_REAL` برمجياً،
-ويبدأ دائماً في وضع Dry Run ما لم يُمرر الخيار `--execute-demo` صراحةً.
+ويبدأ دائماً في وضع Dry Run. حتى عند تمرير `--execute-demo` لا يرسل أمراً
+إلا إذا نجح تقرير الترقية discovery/holdout/forward؛ غياب التقرير يعني الحظر.
 
 ## الإعداد مرة واحدة
 
@@ -32,6 +33,18 @@ py -3 -X utf8 mt5_demo_service.py
 
 ## تفعيل أوامر الديمو
 
+ولّد تقرير الترقية أولاً من إعادة تشغيل MT5 المطابقة للتنفيذ:
+
+```powershell
+py -3 strategy_promotion.py `
+  --discovery data_cache/mt5_native_discovery_2023_2024.json `
+  --holdout data_cache/mt5_native_holdout_2025.json `
+  --forward data_cache/mt5_native_forward_2025_10_2026_09.json `
+  --forward-decisions data_cache/mt5_native_forward_2025_10_2026_09.csv
+```
+
+إذا كانت `promotion_allowed=false` يبقى الأمر التالي Shadow مهما طُلب التنفيذ:
+
 ```powershell
 py -3 -X utf8 mt5_demo_service.py --execute-demo
 ```
@@ -40,6 +53,12 @@ py -3 -X utf8 mt5_demo_service.py --execute-demo
 
 ```powershell
 py -3 -X utf8 mt5_demo_service.py --execute-demo --loop --interval-min 1440
+```
+
+الوضع الآمن الحالي الذي يسجل المجلس ولا يرسل أوامر:
+
+```powershell
+py -3 -X utf8 mt5_demo_service.py --loop --interval-min 1440
 ```
 
 لا يفتح الجسر مركزاً جديداً إذا كان هناك مركز قائم على رمز الذهب. ويستبعد
@@ -58,6 +77,6 @@ py -3 -X utf8 mt5_demo_report.py --days 30
 
 ## شرط التفكير في حساب حقيقي
 
-لا يكفي مرور أسبوعين زمنياً. يلزم على الأقل 30 صفقة مستقلة، عامل ربح أكبر
-من 1.2 بعد كل التكاليف، تراجع ضمن الحد، وعدم وجود أخطاء تنفيذ أو اختلاف بين
+لا يكفي مرور أسبوعين زمنياً. يلزم 30 يوماً و30 صفقة مستقلة، عامل ربح لا يقل
+عن 1.25 بعد كل التكاليف، تراجع ضمن الحد، وعدم وجود أخطاء تنفيذ أو اختلاف بين
 الإشارة والأمر. المشروع الحالي لا يحقق هذا الشرط تاريخياً.

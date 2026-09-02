@@ -22,13 +22,14 @@ from mt5_event_history import event_return_summary
 
 
 ROOT = Path(__file__).resolve().parent
-DEFAULT_DAILY = ROOT / "data_cache" / "gold_daily_2008_2026.csv"
+DEFAULT_DAILY = ROOT / "data_cache" / "mt5_d1_2019_2026.csv"
 DEFAULT_BARS = ROOT / "data_cache" / "mt5_event_bars_m15_2020_2025.csv"
 DEFAULT_MACRO = ROOT / "data_cache" / "macro_point_in_time_2008_2026.csv"
 DEFAULT_NEWS = ROOT / "gold_news_master.csv"
 DEFAULT_NEWS_LABELS = ROOT / "data_cache" / "official_event_news_labels.csv"
 DEFAULT_SURPRISES = ROOT / "data_cache" / "economic_surprises_2020_2025.csv"
 HORIZONS = (15, 60, 240)
+MT5_GOLD_POINT = 0.01
 
 
 def _utc(value) -> pd.Timestamp:
@@ -46,6 +47,75 @@ def net_directed_return(raw_return_pct: float, signal: int, *,
                         slippage_bps_per_side: float = 2.5) -> float:
     roundtrip_slippage_pct = 2 * float(slippage_bps_per_side) / 100
     return float(signal) * float(raw_return_pct) - float(spread_cost_pct) - roundtrip_slippage_pct
+
+
+def simulate_live_exit(window: pd.DataFrame, decision: dict, *,
+                       point: float = MT5_GOLD_POINT,
+                       slippage_bps_per_side: float = 2.5) -> dict:
+    """Replay the same TP1/SL/4h exit policy used by the MT5 DEMO bridge.
+
+    MT5 bars are bid bars. A long enters at ask, while a short exits at ask.
+    If both TP and SL occur inside one M15 bar, the conservative SL outcome is
+    chosen because intrabar ordering is unknowable from OHLC data.
+    """
+    signal = int(decision.get("signal", 0) or 0)
+    levels = decision.get("levels") or {}
+    post = window.copy()
+    if "phase" in post:
+        post = post[post["phase"].eq("after")].copy()
+    post = post.sort_values("time").head(max(HORIZONS) // 15)
+    required = ("entry", "sl", "tp1")
+    if signal not in (-1, 1) or post.empty or any(levels.get(key) is None for key in required):
+        return {"status": "not_executable", "net_return_pct": None}
+
+    first = post.iloc[0]
+    bid_entry = float(first["open"])
+    spread_points = float(first.get("spread", 0) or 0)
+    spread_price = spread_points * float(point)
+    model_entry = float(levels["entry"])
+    stop_distance = abs(model_entry - float(levels["sl"]))
+    target_distance = abs(float(levels["tp1"]) - model_entry)
+    entry = bid_entry + spread_price if signal > 0 else bid_entry
+    stop = entry - stop_distance if signal > 0 else entry + stop_distance
+    target = entry + target_distance if signal > 0 else entry - target_distance
+
+    exit_price = None
+    exit_time = None
+    exit_reason = "time_4h"
+    for _, bar in post.iterrows():
+        bar_spread = float(bar.get("spread", spread_points) or 0) * float(point)
+        if signal > 0:
+            stop_hit = float(bar["low"]) <= stop
+            target_hit = float(bar["high"]) >= target
+        else:
+            # A short is closed against the ask side of the market.
+            stop_hit = float(bar["high"]) + bar_spread >= stop
+            target_hit = float(bar["low"]) + bar_spread <= target
+        if stop_hit:
+            exit_price, exit_reason = stop, "sl"
+        elif target_hit:
+            exit_price, exit_reason = target, "tp1"
+        if exit_price is not None:
+            exit_time = bar["time"]
+            break
+
+    if exit_price is None:
+        last = post.iloc[-1]
+        last_spread = float(last.get("spread", spread_points) or 0) * float(point)
+        exit_price = float(last["close"]) if signal > 0 else float(last["close"]) + last_spread
+        exit_time = last["time"]
+
+    gross = signal * (float(exit_price) / entry - 1.0) * 100
+    net = gross - 2 * float(slippage_bps_per_side) / 100
+    return {
+        "status": "ok",
+        "entry_price": round(entry, 6),
+        "exit_price": round(float(exit_price), 6),
+        "exit_time": pd.Timestamp(exit_time).isoformat(),
+        "exit_reason": exit_reason,
+        "gross_return_pct": round(gross, 6),
+        "net_return_pct": round(net, 6),
+    }
 
 
 def _wilson(wins: int, total: int, z: float = 1.96) -> tuple[float | None, float | None]:
@@ -85,6 +155,27 @@ def summarize_trades(frame: pd.DataFrame, horizons=HORIZONS) -> dict:
             "mean_net_return_pct": round(float(eligible.mean()), 4) if len(eligible) else None,
             "median_net_return_pct": round(float(eligible.median()), 4) if len(eligible) else None,
             "profit_factor": round(gross_profit / gross_loss, 4) if gross_loss else None,
+        }
+    if "execution_net_240m_pct" in frame:
+        eligible = pd.to_numeric(frame["execution_net_240m_pct"], errors="coerce").dropna()
+        wins = eligible[eligible > 0]
+        losses = eligible[eligible <= 0]
+        low, high = _wilson(len(wins), len(eligible))
+        gross_profit = float(wins.sum())
+        gross_loss = abs(float(losses.sum()))
+        output["execution_240m"] = {
+            "trades": int(len(eligible)),
+            "wins": int(len(wins)),
+            "win_rate_pct": round(100 * len(wins) / len(eligible), 2) if len(eligible) else None,
+            "wilson_95_low_pct": round(low, 2) if low is not None else None,
+            "wilson_95_high_pct": round(high, 2) if high is not None else None,
+            "mean_net_return_pct": round(float(eligible.mean()), 4) if len(eligible) else None,
+            "median_net_return_pct": round(float(eligible.median()), 4) if len(eligible) else None,
+            "profit_factor": round(gross_profit / gross_loss, 4) if gross_loss else None,
+            "exit_reasons": (
+                frame.loc[eligible.index, "execution_exit_reason"].value_counts().to_dict()
+                if "execution_exit_reason" in frame else {}
+            ),
         }
     return output
 
@@ -225,6 +316,13 @@ def run_replay(*, daily_path=DEFAULT_DAILY, bars_path=DEFAULT_BARS,
                                     slippage_bps_per_side=slippage_bps_per_side)
                 if raw is not None and int(decision["signal"]) != 0 else None
             )
+        execution = simulate_live_exit(
+            window, decision,
+            slippage_bps_per_side=slippage_bps_per_side,
+        )
+        row["execution_net_240m_pct"] = execution.get("net_return_pct")
+        row["execution_exit_reason"] = execution.get("exit_reason")
+        row["execution_exit_time"] = execution.get("exit_time")
         for report in result["reports"]:
             row[f"agent_{report.key}_score"] = float(report.score)
         for family, score in decision.get("family_scores", {}).items():

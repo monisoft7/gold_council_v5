@@ -67,7 +67,7 @@ def test_demo_execution_window_is_limited_to_tested_utc_time():
 def test_demo_loop_retries_after_transient_service_error(monkeypatch, capsys):
     calls = iter([RuntimeError("temporary MT5 failure"), KeyboardInterrupt()])
 
-    def fake_run_once(*, execute_demo):
+    def fake_run_once(*, execute_demo, promotion_report_path=None):
         result = next(calls)
         if isinstance(result, BaseException):
             raise result
@@ -86,3 +86,9 @@ def test_demo_loop_retries_after_transient_service_error(monkeypatch, capsys):
     assert '"status": "service_error"' in output
     assert '"error_type": "RuntimeError"' in output
     assert '"retry_seconds": 300' in output
+
+
+def test_demo_promotion_gate_fails_closed_for_missing_report(tmp_path):
+    gate = mt5_demo_service.load_promotion_gate(tmp_path / "missing.json")
+    assert gate["promotion_allowed"] is False
+    assert gate["status"] == "missing_or_invalid"
