@@ -13,11 +13,19 @@ from mt5_event_history import (
 def _rates(start="2026-03-06T13:00:00Z", periods=40):
     times = pd.date_range(start, periods=periods, freq="5min")
     return pd.DataFrame({
-        "time": times.astype("int64") // 10**9,
+        # Pandas 3 may store DatetimeIndex values at microsecond resolution,
+        # while Pandas 2 commonly uses nanoseconds. Convert explicitly to
+        # datetime64[s] so this MT5 epoch-seconds fixture is version agnostic.
+        "time": times.to_numpy(dtype="datetime64[s]").astype("int64"),
         "open": range(100, 100 + periods), "high": range(101, 101 + periods),
         "low": range(99, 99 + periods), "close": range(100, 100 + periods),
         "tick_volume": 10, "spread": 2, "real_volume": 0,
     }).to_records(index=False)
+
+
+def test_rate_fixture_uses_epoch_seconds_across_pandas_resolutions():
+    rates = _rates(periods=1)
+    assert int(rates["time"][0]) == int(pd.Timestamp("2026-03-06T13:00:00Z").timestamp())
 
 
 def test_dst_aware_release_times_are_not_fixed_utc():
