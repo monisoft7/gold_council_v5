@@ -18,15 +18,18 @@ class FakeMT5:
     ACCOUNT_TRADE_MODE_DEMO = 0
     TRADE_ACTION_DEAL = 1
     ORDER_TYPE_BUY = 0
+    ORDER_TYPE_SELL = 1
+    POSITION_TYPE_BUY = 0
     ORDER_TIME_GTC = 0
     ORDER_FILLING_IOC = 1
     TRADE_RETCODE_DONE = 10009
     TRADE_RETCODE_DONE_PARTIAL = 10010
     TRADE_RETCODE_PLACED = 10008
 
-    def __init__(self, trade_mode=0):
+    def __init__(self, trade_mode=0, positions=()):
         self.trade_mode = trade_mode
         self.sent = []
+        self.positions = positions
 
     def initialize(self, *args, **kwargs): return True
     def shutdown(self): return True
@@ -44,8 +47,8 @@ class FakeMT5:
         )
     def symbol_select(self, symbol, selected): return True
     def symbols_get(self, group=None): return []
-    def symbol_info_tick(self, symbol): return SimpleNamespace(ask=2500.0)
-    def positions_get(self, symbol=None): return ()
+    def symbol_info_tick(self, symbol): return SimpleNamespace(ask=2500.0, bid=2499.5)
+    def positions_get(self, symbol=None): return self.positions
     def order_check(self, request): return FakeResult(retcode=0, comment="ok")
     def order_send(self, request):
         self.sent.append(request)
@@ -94,6 +97,26 @@ def test_position_below_broker_minimum_is_not_rounded_up():
     result = bridge.submit_decision(decision, execute=True)
     assert result["status"] == "skipped"
     assert fake.sent == []
+
+
+def test_only_project_position_is_closed_after_four_hours():
+    old = 1_700_000_000
+    project = SimpleNamespace(
+        magic=26083101, time=old, type=0, volume=0.01, ticket=77,
+    )
+    manual = SimpleNamespace(
+        magic=123, time=old, type=0, volume=0.01, ticket=88,
+    )
+    fake = FakeMT5(positions=(project, manual))
+    bridge = MT5DemoBridge(MT5ConnectionConfig(), fake)
+    bridge.connect()
+    result = bridge.close_expired_positions(
+        now="2023-11-15T03:13:20Z", max_age_minutes=240, execute=True,
+    )
+    assert len(result["actions"]) == 1
+    assert result["actions"][0]["status"] == "submitted"
+    assert fake.sent[0]["position"] == 77
+    assert fake.sent[0]["type"] == fake.ORDER_TYPE_SELL
 
 
 def test_demo_report_aggregates_closed_positions_after_costs():

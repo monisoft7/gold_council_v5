@@ -10,7 +10,10 @@ pip install -r requirements.txt
 streamlit run app_v2.py            # الواجهة
 python scheduler_service.py        # خدمة 24/7 مع تيليجرام
 python mt5_demo_service.py          # MT5 Demo Dry Run — لا يرسل أمراً
-python mt5_demo_service.py --execute-demo  # إرسال صريح إلى DEMO فقط
+python mt5_demo_service.py --execute-demo  # دورة DEMO عند 18:00 UTC ±30 دقيقة
+python mt5_demo_service.py --execute-demo --loop --interval-min 5  # تنفيذ + إدارة خروج 4h
+python mt5_intraday_history.py --start 2023-01-01 --end 2025-10-01 --timeframe M15 --output data_cache/mt5_m15_2023_2025.csv
+python council_intraday_replay.py --daily data_cache/mt5_d1_2019_2026.csv --bars data_cache/mt5_m15_2023_2025.csv --start 2023-01-01 --end 2025-10-01 --strategy-profile intraday_4h
 python build_economic_calendar.py --high-impact-only  # لقطة Actual/Forecast زمنية
 python mt5_event_history.py --events data_cache/economic_surprises_2020_2025.csv --start 2020-01-01 --end 2025-10-01 --timeframe M15 --bars-before 16 --bars-after 120 --output data_cache/mt5_event_bars_m15_2020_2025.csv --audit-output data_cache/mt5_event_bars_m15_2020_2025_audit.json
 python numeric_surprise_audit.py --surprises data_cache/economic_surprises_2020_2025.csv --bars data_cache/mt5_event_bars_m15_2020_2025.csv --timeframe-minutes 15 --split-date 2023-01-01
@@ -61,6 +64,8 @@ pytest -q tests/                   # الاختبارات (بدون شبكة)
 | `news_classifier.py` | تصنيف الأخبار 7 فئات + Groq اختياري |
 | `mt5_demo_bridge.py` | جسر MT5 يرفض الحساب الحقيقي ويفحص الطلب قبل إرساله |
 | `mt5_demo_service.py` | تشغيل المجلس على شموع MT5 المغلقة وتنفيذ Demo اختياري |
+| `mt5_intraday_history.py` | جلب شموع MT5 التاريخية المستمرة من حساب DEMO للبحث فقط |
+| `council_intraday_replay.py` | إعادة اجتماع المجلس سببيًا وقياس 15/60/240 دقيقة واختبار حذف الوكلاء |
 | `mt5_demo_report.py` | تقرير نتائج 14/30 يوماً من سجل صفقات MT5 |
 | `tests/` | اختبارات تعمل بدون إنترنت، بينها منع تسرب المستقبل وMT5 وLLM failover |
 | `.github/workflows/ci.yml` | CI عند كل push |

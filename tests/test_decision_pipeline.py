@@ -2,6 +2,7 @@ from types import SimpleNamespace
 
 import decision_pipeline
 import paper_journal
+from mt5_demo_service import seconds_until_execution_window, within_execution_window
 
 
 def test_risk_multiplier_changes_actual_position_size():
@@ -51,3 +52,11 @@ def test_paper_journal_is_append_only_and_keeps_wait_decisions(tmp_path):
     assert len(lines) == 2
     assert first["signal"] == 0
     assert first["run_id"] != second["run_id"]
+
+
+def test_demo_execution_window_is_limited_to_tested_utc_time():
+    assert within_execution_window("2026-09-02T18:20:00+00:00") is True
+    assert within_execution_window("2026-09-02T17:20:00+00:00") is False
+    assert seconds_until_execution_window("2026-09-02T17:20:00+00:00") == 600
+    assert seconds_until_execution_window("2026-09-02T18:00:00+00:00") == 0
+    assert seconds_until_execution_window("2026-09-02T19:00:00+00:00") == 81_000

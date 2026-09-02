@@ -200,3 +200,77 @@ class MT5DemoBridge:
             "stage": "order_send",
             "result": result_dict,
         }
+
+    def close_expired_positions(self, *, now=None, max_age_minutes: int = 240,
+                                execute: bool = False) -> dict:
+        """Close only this project's DEMO positions after the tested 4h horizon."""
+        if self.account is None or self.symbol is None:
+            raise RuntimeError("يجب الاتصال بـMT5 قبل إدارة المراكز")
+        if self.account.trade_mode != self.mt5.ACCOUNT_TRADE_MODE_DEMO:
+            raise MT5SafetyError("حظر نهائي: الحساب ليس DEMO")
+        positions = self.mt5.positions_get(symbol=self.symbol)
+        if positions is None:
+            raise RuntimeError(f"تعذر فحص المراكز المفتوحة: {self.mt5.last_error()}")
+        current = pd.Timestamp(now or pd.Timestamp.now(tz="UTC"))
+        current = current.tz_localize("UTC") if current.tzinfo is None else current.tz_convert("UTC")
+        actions = []
+        managed_position_count = 0
+        for position in positions:
+            if int(getattr(position, "magic", -1)) != MAGIC:
+                continue
+            managed_position_count += 1
+            opened = pd.Timestamp(int(position.time), unit="s", tz="UTC")
+            age_minutes = (current - opened).total_seconds() / 60
+            if age_minutes < int(max_age_minutes):
+                continue
+            tick = self.mt5.symbol_info_tick(self.symbol)
+            info = self.mt5.symbol_info(self.symbol)
+            if tick is None or info is None:
+                raise RuntimeError("تعذر قراءة السعر لإغلاق المركز الزمني")
+            is_buy = int(position.type) == int(getattr(self.mt5, "POSITION_TYPE_BUY", 0))
+            close_type = self.mt5.ORDER_TYPE_SELL if is_buy else self.mt5.ORDER_TYPE_BUY
+            close_price = float(tick.bid if is_buy else tick.ask)
+            request = {
+                "action": self.mt5.TRADE_ACTION_DEAL,
+                "symbol": self.symbol,
+                "volume": float(position.volume),
+                "type": close_type,
+                "position": int(position.ticket),
+                "price": round(close_price, int(getattr(info, "digits", 2))),
+                "deviation": int(self.config.deviation),
+                "magic": MAGIC,
+                "comment": "gold_council_4h_exit",
+                "type_time": self.mt5.ORDER_TIME_GTC,
+                "type_filling": self.mt5.ORDER_FILLING_IOC,
+            }
+            checked = self.mt5.order_check(request)
+            if checked is None:
+                raise RuntimeError(f"order_check لإغلاق 4h فشل: {self.mt5.last_error()}")
+            check_dict = checked._asdict()
+            if int(check_dict.get("retcode", -1)) != 0:
+                actions.append({"status": "rejected", "stage": "order_check",
+                                "position": int(position.ticket), "check": check_dict})
+                continue
+            if not execute:
+                actions.append({"status": "dry_run", "position": int(position.ticket),
+                                "age_minutes": round(age_minutes, 1), "request": request})
+                continue
+            result = self.mt5.order_send(request)
+            if result is None:
+                raise RuntimeError(f"order_send لإغلاق 4h فشل: {self.mt5.last_error()}")
+            result_dict = result._asdict()
+            accepted = int(result_dict.get("retcode", -1)) in {
+                self.mt5.TRADE_RETCODE_DONE,
+                getattr(self.mt5, "TRADE_RETCODE_DONE_PARTIAL", -999),
+                getattr(self.mt5, "TRADE_RETCODE_PLACED", -998),
+            }
+            actions.append({
+                "status": "submitted" if accepted else "rejected",
+                "stage": "order_send", "position": int(position.ticket),
+                "age_minutes": round(age_minutes, 1), "result": result_dict,
+            })
+        return {
+            "status": "ok", "actions": actions,
+            "managed_position_count": managed_position_count,
+            "max_age_minutes": int(max_age_minutes),
+        }

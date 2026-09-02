@@ -91,6 +91,7 @@ def run_decision(
     load_cached_macro: bool = False,
     events_path: str | Path = DEFAULT_EVENTS_PATH,
     aggregation_mode: str = "family",
+    strategy_profile: str = "strategic",
     news_event_history: pd.DataFrame | None = None,
     surprise_history: pd.DataFrame | None = None,
     load_cached_surprises: bool = False,
@@ -161,6 +162,7 @@ def run_decision(
         reports, levels, atr_value, last_price,
         trend_bias=trend_bias, ema200=ema200,
         aggregation_mode=aggregation_mode,
+        strategy_profile=strategy_profile,
     )
     apply_risk_sizing(decision, capital, risk_pct)
     decision["decision_at"] = decision_at.isoformat()

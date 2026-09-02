@@ -28,6 +28,14 @@ WEIGHTS_V2 = {
     "cot": 0.12,
 }
 
+# Selected on 2023-2024, then checked once on the untouched 2025 slice.
+# Cross-asset macro remains visible, but does not vote on a four-hour move.
+INTRADAY_4H_WEIGHTS = {**WEIGHTS_V2, "cross": 0.0}
+COUNCIL_PROFILES = {
+    "strategic": WEIGHTS_V2,
+    "intraday_4h": INTRADAY_4H_WEIGHTS,
+}
+
 EVIDENCE_FAMILY = {
     "tech": "price", "pattern": "price",
     "macro_data": "macro", "cross": "macro",
@@ -56,11 +64,22 @@ def _get_w(key):
 
 def chairman_decision(reports, tech_levels, atr_value, last_price,
                       trend_bias: float = 0.0, ema200: float = 0.0,
-                      aggregation_mode: str = "family"):
+                      aggregation_mode: str = "family",
+                      strategy_profile: str = "strategic"):
     """trend_bias: +1 = فوق EMA200 صاعد، -1 = تحت EMA200 هابط، 0 = غير معروف.
     فلتر الاتجاه: يُلغي القرارات القوية المعاكسة للاتجاه العام."""
     if aggregation_mode not in {"family", "agent"}:
         raise ValueError("aggregation_mode must be 'family' or 'agent'")
+    if strategy_profile not in COUNCIL_PROFILES:
+        raise ValueError(f"unknown council strategy_profile: {strategy_profile}")
+    selected_weights = COUNCIL_PROFILES[strategy_profile]
+    family_weights = {
+        family: max(
+            weight for key, weight in selected_weights.items()
+            if EVIDENCE_FAMILY.get(key, key) == family
+        )
+        for family in set(EVIDENCE_FAMILY.values())
+    }
 
     # لا نسمح بتكرار المفتاح نفسه داخل الاجتماع. نحتفظ بالتقرير الأعلى ثقة
     # حتى لا يستطيع مصدر مكرر تضخيم عائلة الدليل.
@@ -74,7 +93,7 @@ def chairman_decision(reports, tech_levels, atr_value, last_price,
     # المجلس هو المصدر الوحيد للأوزان. تجاهل الأوزان القديمة المزروعة داخل
     # الوكلاء، واستبعد وكلاء جمع البيانات/المخاطر من التصويت الاتجاهي.
     for r in unique_reports.values():
-        w = _get_w(r.key) if r.key in WEIGHTS_V2 else 0.0
+        w = selected_weights.get(r.key, 0.0)
         if w > 0:
             voting.append((r, w))
     family_scores = {}
@@ -94,7 +113,7 @@ def chairman_decision(reports, tech_levels, atr_value, last_price,
 
     if aggregation_mode == "family":
         voting_units = [
-            (family, score, family_confidences[family], FAMILY_WEIGHTS[family])
+            (family, score, family_confidences[family], family_weights[family])
             for family, score in family_scores.items()
         ]
     else:
@@ -256,6 +275,7 @@ def chairman_decision(reports, tech_levels, atr_value, last_price,
         "supporting_families": supporting_families,
         "family_scores": {k: round(v, 1) for k, v in sorted(family_scores.items())},
         "aggregation_mode": aggregation_mode,
+        "strategy_profile": strategy_profile,
         "strategy_validated": STRATEGY_VALIDATED,
         "research_only": not STRATEGY_VALIDATED,
         "risk_multiplier": round(max(0.0, min(1.0, risk_multiplier)), 2),
