@@ -1,25 +1,22 @@
 # رفع المشروع إلى GitHub — خطوات مضمونة
 
-## الخيار 1: أنت ترفع (الأكثر أماناً — موصى به)
+## مستودع خاص — موصى به
 
-```bash
-cd "gold_council"
-git init
-git add .
-git commit -m "Initial Gold Council research platform"
-# أنشئ مستودعاً فارغاً من github.com/new ثم:
+```powershell
+cd "C:\Users\THE BLU WALF\Desktop\gold_council_v8_events\gold_council_v5"
+# أنشئ مستودعاً خاصاً فارغاً من github.com/new ثم:
 git remote add origin https://github.com/USERNAME/gold-council.git
-git branch -M main
 git push -u origin main
 ```
 
 أو بأداة GitHub الرسمية:
-```bash
-gh auth login
-gh repo create gold-council --private --source=. --push
+```powershell
+gh auth login -h github.com
+gh repo create gold-council --private --source=. --remote=origin --push
 ```
 
-> ⚠ ملف `.env` مستثنى تلقائياً عبر `.gitignore` — تحقق قبل الرفع: `git status` يجب ألا يُظهر `.env`.
+> ⚠ ملف `.env` و`data_cache/` مستثنيان. لا تستخدم خيار `--public` لأن وصف
+> المشروع ونتائجه لا يمثلان منتجاً مالياً معتمداً.
 
 ## الرفع الآمن
 
@@ -28,4 +25,4 @@ gh repo create gold-council --private --source=. --push
 
 ## بعد الرفع
 - Actions → سترى CI يعمل تلقائياً عند كل push (pytest + فحص الصياغة)
-- أضف وصف المستودع: "Multi-agent AI council for XAU/USD recommendations — 9 agents + ML gate + walk-forward validation"
+- أضف الوصف: "Research-only multi-agent XAU/USD council with causal replay and MT5 Demo safeguards"

@@ -19,6 +19,7 @@ import paper_journal
 EXECUTION_JOURNAL = Path(__file__).resolve().parent / "data_cache" / "mt5_demo_execution.jsonl"
 EXECUTION_HOUR_UTC = 18
 EXECUTION_WINDOW_MINUTES = 30
+LOOP_ERROR_RETRY_SECONDS = 300
 
 
 def _config() -> MT5ConnectionConfig:
@@ -163,7 +164,23 @@ def main() -> None:
     parser.add_argument("--interval-min", type=int, default=1440)
     args = parser.parse_args()
     while True:
-        payload = run_once(execute_demo=args.execute_demo)
+        try:
+            payload = run_once(execute_demo=args.execute_demo)
+        except Exception as exc:
+            # تشغيل الحلقة يجب أن يتعافى من انقطاع MT5 أو الشبكة بدلاً من
+            # سقوط الحارس بالكامل. التشغيل لمرة واحدة يبقى صارماً للتشخيص.
+            if not args.loop:
+                raise
+            payload = {
+                "recorded_at": datetime.now(timezone.utc).isoformat(),
+                "status": "service_error",
+                "error_type": type(exc).__name__,
+                "reason": str(exc),
+                "retry_seconds": LOOP_ERROR_RETRY_SECONDS,
+            }
+            print(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
+            time.sleep(LOOP_ERROR_RETRY_SECONDS)
+            continue
         print(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
         if not args.loop:
             break

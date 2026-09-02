@@ -1,7 +1,9 @@
 from types import SimpleNamespace
+import sys
 
 import decision_pipeline
 import paper_journal
+import mt5_demo_service
 from mt5_demo_service import seconds_until_execution_window, within_execution_window
 
 
@@ -60,3 +62,27 @@ def test_demo_execution_window_is_limited_to_tested_utc_time():
     assert seconds_until_execution_window("2026-09-02T17:20:00+00:00") == 600
     assert seconds_until_execution_window("2026-09-02T18:00:00+00:00") == 0
     assert seconds_until_execution_window("2026-09-02T19:00:00+00:00") == 81_000
+
+
+def test_demo_loop_retries_after_transient_service_error(monkeypatch, capsys):
+    calls = iter([RuntimeError("temporary MT5 failure"), KeyboardInterrupt()])
+
+    def fake_run_once(*, execute_demo):
+        result = next(calls)
+        if isinstance(result, BaseException):
+            raise result
+        return result
+
+    monkeypatch.setattr(mt5_demo_service, "run_once", fake_run_once)
+    monkeypatch.setattr(mt5_demo_service.time, "sleep", lambda _seconds: None)
+    monkeypatch.setattr(sys, "argv", ["mt5_demo_service.py", "--loop"])
+
+    try:
+        mt5_demo_service.main()
+    except KeyboardInterrupt:
+        pass
+
+    output = capsys.readouterr().out
+    assert '"status": "service_error"' in output
+    assert '"error_type": "RuntimeError"' in output
+    assert '"retry_seconds": 300' in output

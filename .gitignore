@@ -9,10 +9,16 @@
 data_cache/
 __pycache__/
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
 .codex_test_tmp*/
 .codex_pytest*/
 .venv-ml/
 *.pyc
+*.log
+*.jsonl
 
 # مخرجات التشغيل (اختياري — احذف السطرين التاليين إذا أردت مشاركة النتائج)
 bt_*.json
