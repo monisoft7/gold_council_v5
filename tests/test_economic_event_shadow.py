@@ -1,6 +1,6 @@
 import pandas as pd
 
-from economic_event_shadow import completed_nfp_signals, latest_states
+from economic_event_shadow import adaptive_poll_seconds, completed_nfp_signals, latest_states
 
 
 def test_shadow_uses_only_main_nfp_actual_known_by_asof():
@@ -26,3 +26,14 @@ def test_latest_journal_record_is_the_current_state():
         {"event_id": "NFP:x", "status": "open"},
     ]
     assert latest_states(rows)["NFP:x"]["status"] == "open"
+
+
+def test_polling_is_slow_when_idle_and_five_minutes_near_nfp():
+    history = pd.DataFrame([{
+        "title": "Non-Farm Employment Change",
+        "release_time": "2026-09-04T12:30:00Z",
+    }])
+    assert adaptive_poll_seconds(history, now="2026-09-02T12:30:00Z") == 3600
+    assert adaptive_poll_seconds(history, now="2026-09-04T12:20:00Z") == 300
+    assert adaptive_poll_seconds(history, now="2026-09-04T12:20:00Z",
+                                 error_streak=3, retry_after=1800) == 1800

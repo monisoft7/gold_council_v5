@@ -13,6 +13,7 @@ import pandas as pd
 
 from economic_event_strategy import EventStrategyConfig, pre_event_atr, simulate_event
 from build_economic_calendar import update_snapshot
+from economic_surprise_agent import CalendarFetchError
 from mt5_event_history import MT5EventHistoryReader, connection_from_env
 
 
@@ -84,6 +85,40 @@ def latest_states(rows: list[dict]) -> dict[str, dict]:
 
 def _event_id(release_time) -> str:
     return f"NFP:{pd.Timestamp(release_time).isoformat()}"
+
+
+def adaptive_poll_seconds(history: pd.DataFrame | None, *, now=None,
+                          minimum_seconds=60, error_streak=0,
+                          retry_after=None) -> int:
+    """Poll hourly when idle and at most every five minutes near NFP."""
+    current = pd.Timestamp(now or pd.Timestamp.now(tz="UTC"))
+    current = current.tz_localize("UTC") if current.tzinfo is None else current.tz_convert("UTC")
+    base = 6 * 3600
+    if history is not None and not history.empty \
+            and {"release_time", "title"}.issubset(history.columns):
+        frame = history.copy()
+        frame["release_time"] = pd.to_datetime(frame["release_time"], errors="coerce", utc=True)
+        future = frame[
+            frame["title"].astype(str).map(_is_main_nfp)
+            & frame["release_time"].notna()
+            & (frame["release_time"] >= current - pd.Timedelta(hours=4))
+        ]
+        if not future.empty:
+            event = future["release_time"].min()
+            minutes = (event - current).total_seconds() / 60
+            if minutes > 360:
+                base = 3600
+            elif minutes > 30:
+                base = 900
+            elif minutes >= -30:
+                base = 300
+            else:
+                base = 900
+    if error_streak:
+        base = max(base, min(6 * 3600, 300 * (2 ** min(error_streak - 1, 6))))
+    if retry_after:
+        base = max(base, int(retry_after))
+    return max(int(minimum_seconds), int(base))
 
 
 def run_shadow_once(*, snapshots=DEFAULT_SNAPSHOTS, journal=DEFAULT_JOURNAL,
@@ -187,11 +222,23 @@ def main() -> None:
     parser.add_argument("--max-cycles", type=int)
     args = parser.parse_args()
     cycles = 0
+    error_streak = 0
+    retry_after = None
     while True:
         if args.watch:
             try:
                 update_snapshot(args.snapshots, high_impact_only=True)
+                error_streak = 0
+                retry_after = None
+            except CalendarFetchError as exc:
+                error_streak += 1
+                retry_after = exc.retry_after
+                print(json.dumps({"status": "calendar_error", "reason": str(exc),
+                                  "http_status": exc.status_code,
+                                  "retry_after": exc.retry_after},
+                                 ensure_ascii=False), flush=True)
             except Exception as exc:
+                error_streak += 1
                 print(json.dumps({"status": "calendar_error", "reason": str(exc)},
                                  ensure_ascii=False), flush=True)
         try:
@@ -202,7 +249,17 @@ def main() -> None:
         cycles += 1
         if not args.watch or (args.max_cycles is not None and cycles >= args.max_cycles):
             break
-        time.sleep(max(30, int(args.interval_seconds)))
+        try:
+            history = pd.read_csv(args.snapshots)
+        except Exception:
+            history = None
+        wait_seconds = adaptive_poll_seconds(
+            history, minimum_seconds=args.interval_seconds,
+            error_streak=error_streak, retry_after=retry_after,
+        )
+        print(json.dumps({"status": "sleeping", "next_check_seconds": wait_seconds,
+                          "adaptive": True}, ensure_ascii=False), flush=True)
+        time.sleep(wait_seconds)
 
 
 if __name__ == "__main__":

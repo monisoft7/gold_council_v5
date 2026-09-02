@@ -23,6 +23,13 @@ SOURCE_NAME = "ForexFactory weekly JSON mirror (unofficial)"
 USER_AGENT = {"User-Agent": "GoldCouncil/1.0 causal-research"}
 
 
+class CalendarFetchError(RuntimeError):
+    def __init__(self, message: str, *, status_code=None, retry_after=None):
+        super().__init__(message)
+        self.status_code = status_code
+        self.retry_after = retry_after
+
+
 @dataclass(frozen=True)
 class EconomicValue:
     value: float
@@ -109,8 +116,29 @@ def calculate_surprise(actual_raw: Any, forecast_raw: Any, previous_raw: Any,
 def fetch_weekly_calendar(*, fetched_at=None, timeout: int = 20,
                           session=requests) -> pd.DataFrame:
     """Fetch the current week and timestamp what was knowable at collection."""
-    response = session.get(CALENDAR_URL, headers=USER_AGENT, timeout=timeout)
-    response.raise_for_status()
+    try:
+        response = session.get(CALENDAR_URL, headers=USER_AGENT, timeout=timeout)
+    except requests.RequestException as exc:
+        raise CalendarFetchError(f"calendar network error: {exc}") from None
+    status = int(getattr(response, "status_code", 200))
+    headers = getattr(response, "headers", {}) or {}
+    retry_after_raw = headers.get("Retry-After")
+    try:
+        retry_after = int(retry_after_raw) if retry_after_raw else None
+    except (TypeError, ValueError):
+        retry_after = None
+    if status == 429:
+        raise CalendarFetchError(
+            "calendar rate limited (HTTP 429)", status_code=429,
+            retry_after=retry_after,
+        )
+    try:
+        response.raise_for_status()
+    except requests.RequestException as exc:
+        raise CalendarFetchError(
+            f"calendar HTTP error {status}", status_code=status,
+            retry_after=retry_after,
+        ) from None
     payload = response.json()
     if not isinstance(payload, list):
         raise RuntimeError("economic calendar payload is not a list")

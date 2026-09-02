@@ -16,7 +16,8 @@ python mt5_event_history.py --events data_cache/economic_surprises_2020_2025.csv
 python numeric_surprise_audit.py --surprises data_cache/economic_surprises_2020_2025.csv --bars data_cache/mt5_event_bars_m15_2020_2025.csv --timeframe-minutes 15 --split-date 2023-01-01
 python economic_event_strategy.py   # باكتيست دخول M15 + وقف ATR + خروج 4h
 python economic_event_shadow.py     # NFP Shadow فقط؛ لا يبني ولا يرسل أمراً
-python economic_event_shadow.py --watch --interval-seconds 60  # مراقب خفيف بلا LLM
+python economic_event_shadow.py --watch --interval-seconds 60  # بلا LLM؛ 60 حد أدنى مع جدولة تكيفية
+python nfp_dataset_quality.py --input "PATH_TO_CSV" --source-timezone Asia/Jerusalem
 python backtester_v5.py --replay --days 720 --step 2 --aggregation-mode family --prices-csv data_cache/gold_daily_2008_2026.csv --macro-csv data_cache/macro_point_in_time_2008_2026.csv --events-csv data_cache/events_2008_2026.csv --news-csv gold_news_master.csv --out bt.json --features-out features_v5.csv
 python ml_trainer.py --features features_v5.csv --model-out model.pkl --features-out feat_names.json
 python walk_forward.py --features features_v5.csv   # التحقق خارج العينة

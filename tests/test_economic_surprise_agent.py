@@ -3,6 +3,7 @@ from types import SimpleNamespace
 import pandas as pd
 
 from economic_surprise_agent import (
+    CalendarFetchError,
     EconomicValue,
     calculate_surprise,
     economic_surprise_agent,
@@ -39,11 +40,24 @@ class FakeSession:
         )
 
 
+class RateLimitedSession:
+    def get(self, *args, **kwargs):
+        return SimpleNamespace(status_code=429, headers={"Retry-After": "900"})
+
+
 def test_fetch_uses_observation_time_not_release_time_for_actual():
     fetched = pd.Timestamp("2026-09-01T12:31:15Z")
     frame = fetch_weekly_calendar(fetched_at=fetched, session=FakeSession())
     assert frame.iloc[0]["release_time"] == pd.Timestamp("2026-09-01T12:30:00Z")
     assert frame.iloc[0]["actual_available_at"] == fetched
+
+
+def test_rate_limit_exposes_retry_after_without_retry_loop():
+    import pytest
+    with pytest.raises(CalendarFetchError) as raised:
+        fetch_weekly_calendar(session=RateLimitedSession())
+    assert raised.value.status_code == 429
+    assert raised.value.retry_after == 900
 
 
 def test_snapshot_merge_keeps_what_each_poll_knew():
